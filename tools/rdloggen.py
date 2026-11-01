@@ -14,7 +14,7 @@ class LogError(RuntimeError):
     pass
 
 def command(service: str, offset: int) -> list[str]:
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,10}", service):
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,9}", service):
         raise LogError("Invalid service name (1-10 letters, digits, _ or -)")
     if not 0 <= offset <= 30:
         raise LogError("Day offset out of bounds")
