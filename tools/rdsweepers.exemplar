@@ -1,0 +1,16 @@
+; Sweepers overlay ONLY when the current song's verified vocal intro
+; exceeds the chosen sweeper duration plus configured guard/headroom.
+; The dedicated S50 panel must be routed to same JACK mix bus as main log.
+[Sweepers]
+Catalog=/home/studio/.config/rivendell-complete/sweepers.json
+Every=4
+DelayMs=500
+MasterLog=Onair
+Aux1Log=No
+Aux2Log=No
+
+[NowGroups]
+; Group1=POWER
+; Group2=GOLD
+
+[NextGroups]
