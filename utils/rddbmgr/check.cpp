@@ -1322,14 +1322,25 @@ void MainObject::ValidateAudioLengths() const
   q=new QSqlQuery(sql);
   while(q->next()) {
     if(q->value(2).toInt()>0) {
-      wave=new RDWaveFile(RDCut::pathName(q->value(0).toString()));
+      // External cuts may be temporarily unavailable when their read-only
+      // NAS mount goes away. Never zero a valid cut duration just because
+      // the remote file cannot be opened at maintenance time.
+      const QString cutname=q->value(0).toString();
+      const QString audio_path=db_config->playbackAudioFileName(cutname);
+      if(audio_path.isEmpty()) {
+        printf("  External cut %s unavailable; preserving database length.\n",
+               cutname.toUtf8().constData());
+        continue;
+      }
+      wave=new RDWaveFile(audio_path);
       if(wave->openWave()) {
 	if((int)wave->getExtTimeLength()<(q->value(2).toInt()-100)) {
-	  SetCutLength(q->value(0).toString(),wave->getExtTimeLength());
+	  SetCutLength(cutname,wave->getExtTimeLength());
 	}
       }
       else {
-	SetCutLength(q->value(0).toString(),0);
+        printf("  Cut %s audio unavailable; preserving database length.\n",
+               cutname.toUtf8().constData());
       }
       delete wave;
     }
