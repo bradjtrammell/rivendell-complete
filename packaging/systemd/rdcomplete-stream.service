@@ -1,0 +1,17 @@
+[Unit]
+Description=Rivendell Complete - GlassCoder station encoder
+Documentation=https://manpages.debian.org/unstable/glasscoder/glasscoder.1.en.html
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/rdcomplete-stream run
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
