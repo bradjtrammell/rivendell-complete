@@ -1,102 +1,131 @@
 # Rivendell Complete
 
-**Complete radio automation for internet radio stations and terrestrial broadcast stations.**
+**Radio automation for internet stations, broadcast stations, and simulcasts — one integrated system.**
 
-Rivendell Complete is a fork of **Rivendell 4** designed to run an entire station from one integrated Linux automation system: **music and programming, live-assist playout, intelligent scheduling, station IDs, commercials, imaging, built-in listener requests, built-in streaming encoders, and native support for existing NAS music libraries.** An internet-only station must be able to operate without any terrestrial transmitter equipment; an FM or other broadcast station must be able to drive its local/studio output **and** any internet stream at the same time.
+Rivendell Complete extends [Rivendell 4](https://github.com/ElvishArtisan/rivendell) into a full station automation platform. The intended product brings together music scheduling, professional playout, live assist, imaging, commercial traffic, listener requests, streaming encoders, and direct access to music already stored on a NAS.
 
-> **DEVELOPMENT STATUS — NOT A FINISHED OR PRODUCTION-QUALIFIED STATION.** The description above is the *target product*, not a claim that every feature is implemented or has passed end-to-end verification. [Read the complete, binding acceptance contract](docs/complete/ACCEPTANCE.md) for every requirement, status, and test gate.
+**Internet-only stations do not need an FM transmitter or broadcast sound card.** Terrestrial stations can use the same platform for a local studio/transmitter feed and simultaneous internet streaming.
 
-## Who it is for
+> **Release status:** Active development. Some components exist and pass automated tests; a complete Ubuntu 26.04 installation and an uninterrupted on-air station have **not** been verified. This repository is not yet a production release. The [acceptance ledger](docs/complete/ACCEPTANCE.md) tracks every requirement, including unfinished work.
 
-- **Internet radio stations:** complete scheduling, music playback, jingles, live assist, web listener requests, now-playing metadata, and built-in SHOUTcast/Icecast encoding, all on the station's Linux PC. No FM equipment is required.
-- **Terrestrial radio stations:** everything above, plus reliable local audio for a studio/transmitter link or on-site air chain, timed station IDs and commercial breaks, operator control, and optional simultaneous online simulcasting.
-- **Stations with NAS music libraries:** directly index and play the **original songs where they already are** on NFS/SMB storage. No forced import to Rivendell-owned carts, no parallel copy of the library, no moving or renaming source files.
-- **Small, independent and unattended operators:** straightforward station setup, continuous clocks, scheduled content and requests, service recovery and visibility into station health. Professional broadcast controls remain available when an operator takes over.
+## One system for the entire station
 
-**This is one product, not a pile of independent utilities, and it is not Rivolution or RadioCentral.** The objective is to preserve Rivendell's proven automation architecture while delivering an integrated, RadioDJ-comparable end-to-end station workflow on Linux.
+| Station function | Intended experience | Current implementation |
+| :-- | :-- | :-- |
+| Library and NAS | Index and play original files from their existing NFS/SMB folders, without moving, renaming, re-encoding, or copying them | External playback references and zero-copy indexing implemented; real playout still unqualified |
+| On-air automation | Automatic and live-assist programming with reliable logs, cues and crossfades | Rivendell 4 foundation retained; end-to-end automation unqualified |
+| Music scheduling | Category rotations, artist/album/title separation, intelligent clocks and real-time top-hour backtiming | Offline planning implemented; continuous live reflow unfinished |
+| Station imaging | IDs, liners, jingles and sweepers that can play over safe song intros | PyPAD/SoundPanel foundations; physical mix unverified |
+| Commercial traffic | Protected paid spots, break groups and precise scheduled events | Offline protected spot breaks; aircheck proof missing |
+| Listener requests | Built-in authenticated requests, eligibility, moderation, automatic queueing and verified playback | API and guarded insertion present; playback confirmation unfinished |
+| Streaming | Built-in same-PC SHOUTcast v1/v2 and Icecast, with now-playing metadata and reconnect | GlassCoder integration implemented; server handshakes unverified |
+| Local output | Studio audio / transmitter link alongside simultaneous streaming | Rivendell audio and JACK routing components; real hardware unverified |
+| Recovery | Recover from NAS, service, audio and encoder failures without dead air | Partial monitoring and reconnection; emergency failover missing |
+| Installation | One dependable setup on Ubuntu 26.04 with all station features configured | Development-only installer; Debian package and fresh-install qualification pending |
 
-## What “Complete” means — required product scope
+Every row above is part of the product scope. **Implemented code is not automatically a verified feature.** See [all 56 tracked requirements](docs/complete/ACCEPTANCE.md) for the precise acceptance criteria.
 
-| Area | Required integrated behavior | Current reality |
-| --- | --- | --- |
-| Ubuntu/Linux | Original Rivendell 4 native on Ubuntu **26.04 LTS**, with real packages and a reliable installer | **Partial** — source port, installer and packaging work in progress |
-| Existing NAS music | Read original, unchanged files directly over read-only **NFS or SMB**, with zero library duplication | **Partial** — path resolver/indexer exist; full live playback and destructive-operation safety not qualified |
-| Music formats and catalog | MP3, supported PCM WAV, Ogg Vorbis, **FLAC** and actual library formats; batch indexing; metadata, cue/intro/segue editing | **Partial** — several decoder/catalog paths exist; FLAC and full editing missing |
-| Automation | Continuous station clocks, rotation by category, song/artist/album separation, automatic future logs and operator override | **Partial** — offline planners and scheduled log-generation utilities |
-| Precise events | Real-time intelligent top-of-hour backtiming, hard legal/station IDs, spots/paid breaks, no dead air | **Partial** — offline protected events; live self-adjusting playout not qualified |
-| Imaging | Jingles, liners, sweepers **over instrumental intros** without obscuring vocals, production controls | **Partial** — introductory PyPAD/SoundPanel integration, not on-air verified |
-| Listener requests | **Built-in**, safe request intake, eligibility/rate limits, queue, approval, automated insertion, playback confirmation | **Partial** — API, queue and guarded insertions exist; end-to-end playback confirmation missing |
-| Stream encoding | **Built-in** same-computer SHOUTcast v1/v2 and Icecast streams, metadata, reconnect independent of other outputs | **Partial** — supervised GlassCoder integration, real streams unverified |
-| Local/studio output | Local audio, live assist, cartwall, segue/crossfade and optional studio-to-transmitter chain | **Partial** — Rivendell controls remain; full audio chain unqualified |
-| All-in-one setup | Install/configure station, database, NAS, audio, clock, traffic, requests, encoding and recovery with minimal intervention | **Incomplete** — multiple manual configuration steps remain |
-| Recovery | Auto-start after reboot, recover NAS/link/stream issues, monitored silence and emergency playout, preserve logs | **Incomplete** — some monitoring/reconnect mechanisms, no verified on-air failover |
-| Production verification | Native package installation, full-day continuous playout, 8 GB/128 GB target hardware, real NAS/stream/hardware tests | **Not completed** |
+## Built for both kinds of radio
 
-**“Partial” means implemented source is *not* proof that a station works.** No feature may be marked complete until its operator-facing workflow and failure modes pass tests. Current authoritative state: [Acceptance contract and requirements ledger](docs/complete/ACCEPTANCE.md).
+### Internet radio
 
-## Original-path, zero-copy NAS playback
+Run a complete online station on one Linux PC: scheduled playlists, automation, jingles and IDs, request intake, and direct encoding to SHOUTcast or Icecast. No terrestrial transmission equipment is needed.
 
-This is a defining project rule, not an optional enhancement.
+### AM / FM and other terrestrial radio
 
-\`\`\`text
-Existing NAS music directory (UNCHANGED)
-        |
-        +--- read-only NFS or SMB mount
-                 |
-        external file references + metadata database on local SSD
-                 |
-        Rivendell Complete playback / automation / imaging
-                      |
-               output / mixer
-                /          \
-  local radio/studio audio   built-in SHOUTcast/Icecast encoding
-     (broadcast stations)       (internet and simulcast stations)
-\`\`\`
+Operate local audio for studio or transmitter links while feeding one or more online listening streams. Keep protected legal IDs, traffic/commercial breaks, live assist and local on-air controls.
 
-The originals must **not** be moved, renamed, converted, copied into a second Rivendell library, or written/deleted by cart-management operations. The computer may maintain a separate **small local managed cart/workspace** and **purpose-built emergency programming**; that is not permission to duplicate the original music library. The mounted source must be read-only, and errors or broken NAS references must not corrupt database durations or source content.
+### Stations with existing NAS libraries
 
-## First deployment: Ubuntu 26.04 single-station workstation
+Keep the original music files **exactly where they are**. Rivendell Complete must treat an existing NAS share as a read-only source, with a separate local metadata catalog and small Rivendell-controlled workspace. A cart record may point to an original path, but that does not authorize modifying the source file.
 
-The **first qualification target** is a fresh **Ubuntu 26.04 Desktop, x86_64**, with **8 GB RAM**, **128 GB boot SSD**, **one station per PC**, and music on the existing NAS at its original paths. This is a required supported deployment profile **not** a limitation to FM-only, internet-only, or this particular operator. Independent internet stations can run with no local transmitter output.
+```text
+Existing music on NAS (read-only NFS / SMB)
+                    |
+     External media index and cart references
+                    |
+      Rivendell Complete automation
+       /           |            \
+  Live assist   Imaging / IDs   Scheduling
+       \           |            /
+                Audio mix
+                 /     \
+    Local studio output   SHOUTcast / Icecast
+    (when applicable)     (internet listening)
+```
 
-The project was requested as an urgent deployment because Windows automation workstations can hang and take stations off-air. The initial goal was to deploy a *fully functioning* station in under four hours. **That time is not yet demonstrated**; do not present a successful build as a complete on-air installation.
+**Zero-copy rule:** never duplicate the NAS music library, silently import songs into another audio store, or change an original file for playback, catalog edits, or deletion. Cue points, rotations and play history belong in station metadata. Supported media formats must include MP3, WAV, Ogg Vorbis and FLAC; remaining playback/format gaps are tracked in the acceptance ledger.
 
-### Development checkout — inspect/build only
+## Deployment target
 
-\`\`\`bash
+The initial qualification profile is:
+
+| Item | Specification |
+| :-- | :-- |
+| OS | Ubuntu **26.04 LTS**, x86-64 |
+| Memory | **8 GB RAM** |
+| Boot/system drive | **128 GB SSD** |
+| Stations per computer | **One** |
+| Music location | Existing NAS paths; NFS or SMB mounted **read-only** |
+| Database | Local MariaDB, on the system SSD |
+| Playout/encoding | Station PC, with configured local output and/or internet streams |
+
+These specifications are an initial supported target, **not** a restriction that Rivendell Complete can only serve that hardware or terrestrial broadcasters.
+
+### Developer build (not a station installation)
+
+```bash
 sudo apt-get update
 sudo apt-get install -y git
 git clone --branch feat/ubuntu26-external-nas-media \
   https://github.com/bradjtrammell/rivendell-complete.git
 cd rivendell-complete
 bash tools/install-ubuntu26.sh --build-only
-\`\`\`
+```
 
-**Important:** \`--build-only\` tests a source/package-build path; it does **not** install or configure an operational station. The native Debian packaging error reported on the actual Ubuntu 26 workstation is being fixed on this branch. **Do not run \`--install\` on a production station until package build and fresh-install qualification pass.** The workbench and original NAS must remain separate.
+This mode prepares dependencies and attempts to build native packages. **It does not install a working, configured station.** The Ubuntu 26.04 build path has encountered real dependency, C++ and Debian packaging failures. Changes have been committed for those failures, but complete packaging and hardware verification must pass before an installation is recommended.
 
-Read [Station commissioning](docs/complete/STATION_SETUP.md) and [NAS integration](docs/complete/EXTERNAL_MEDIA.md) before configuring mounts or external cuts.
+For commissioning details, see the [station setup guide](docs/complete/STATION_SETUP.md). **Do not use the experimental `--install` mode for a station carrying live programming yet.**
 
-## What currently exists in code
+## Architecture and project files
 
-| Component | Source |
-| --- | --- |
-| Original-path external cut resolver and guarded CAE playback | \`lib/rdconfig.{h,cpp}\`, \`cae/cae.cpp\` |
-| NFS/SMB read-only setup; external music indexing and catalog export | \`tools/setup-nas.sh\`, \`tools/rdexternal.py\`, \`tools/rdcatalog.py\` |
-| Rotation/artist/album/title separation; hard IDs, spot breaks and timed offline logs | \`tools/rdsmartclock.py\`, \`tools/rdstationplan.py\`, \`tools/rdloggen.py\` |
-| Authenticated listener requests, persistent queue and guarded live \`PX\` insertion | \`tools/rdrequests.py\`, \`tools/rdlive.py\`, \`rdairplay/local_macros.cpp\` |
-| Imaging, local stream metadata and same-PC encoders | \`tools/rdsweepers.py\`, \`tools/pypad_glasscoder.py\`, \`tools/rdstream.py\`, \`tools/rdmetadata.py\` |
-| Audio routing and recovery foundations | \`tools/rdjackroute.py\`, \`tools/rdselftest.py\`, systemd service files |
-| Native Ubuntu 26 port and experimental packaging | \`configure.ac\`, \`debian/\`, \`rdairplay/messagewidget.*\`, \`tools/install-ubuntu26.sh\` |
-| Regression checks and CI | \`tests/\`, \`.github/workflows/rivendell-complete-ci.yml\` |
+The upstream Rivendell applications — **RDAirPlay, RDLibrary, RDAdmin, RDLogEdit, RDLogManager and RDPanel** — are the foundation. Rivendell Complete integrates new components rather than requiring a second music library or a separate internet-radio automation product.
 
-**These are committed components, not yet a verified integrated station.** In particular, direct FLAC playout, continuous live backtiming, guaranteed hard-event playback, comprehensive failure recovery, turnkey administration, and full real-world acceptance remain outstanding.
+| Area | Implementation |
+| :-- | :-- |
+| NAS path resolution | `lib/rdconfig.*`, `cae/cae.cpp` |
+| Library mounts / catalog | `tools/setup-nas.sh`, `tools/rdexternal.py`, `tools/rdcatalog.py` |
+| Scheduling / traffic / logs | `tools/rdsmartclock.py`, `tools/rdstationplan.py`, `tools/rdloggen.py` |
+| Requests / safe insertion | `tools/rdrequests.py`, `tools/rdlive.py`, `rdairplay/local_macros.cpp` |
+| Imaging / metadata | `tools/rdsweepers.py`, `tools/pypad_glasscoder.py`, `tools/rdmetadata.py` |
+| Encoder / audio routes | `tools/rdstream.py`, `tools/rdjackroute.py` |
+| Ubuntu provisioning / diagnostics | `tools/install-ubuntu26.sh`, `tools/rdselftest.py`, `debian/` |
+| Automated checks | `tests/`, `.github/workflows/rivendell-complete-ci.yml` |
 
-## Definition of done
+## Release acceptance — what has to work together
 
-Rivendell Complete is **not ready** simply because it compiles, has a GitHub Actions green check, accepts a request, produces a plan, or connects to a stream encoder. It is ready **only after** the complete installation, original NAS playout, live scheduling, imaging, listener requests, paid/ID events, internet encoding, relevant broadcast outputs and recovery are demonstrated **together**, including reboot and outage tests, on actual Ubuntu 26.04 hardware.
+No public release is considered station-ready until **all** of the following work in a clean installation:
 
-The binding [acceptance contract](docs/complete/ACCEPTANCE.md) enumerates **every requested feature** and the exact qualification evidence required. Changes must update the contract/README and add tests when the implementation changes. No scope may be silently dropped; no unverified behavior may be marked complete.
+1. Native Ubuntu 26.04 package build and installation, MariaDB initialization, application launch, and repeatable upgrade/rollback.
+2. Direct original-path NAS playback and full supported-format coverage with no change to source music, including during editing and deletion.
+3. Continuous unattended logs, music separation, IDs, commercials, intro sweepers, top-hour backtiming and live-assist takeover.
+4. End-to-end listener request intake, safe insertion, real playback confirmation and correct broadcast logs.
+5. Working local output and/or streaming encoder, actual SHOUTcast/Icecast connections, metadata and recovery.
+6. Reboots, NAS loss, encoder crashes and network interruptions handled safely; a full 24-hour real-hardware air test without dead air.
 
-## Upstream, licenses and contributors
+[**View the authoritative feature-by-feature acceptance contract**](docs/complete/ACCEPTANCE.md)
 
-Rivendell Complete is a community fork of the [Rivendell Project](https://github.com/ElvishArtisan/rivendell), originally developed by Fred Gleason and contributors. This project preserves applicable upstream notices and the licenses in [LICENSES](LICENSES). The original upstream command-line/application documentation remains applicable where unchanged; see [README](README), [INSTALL](INSTALL), and [UPGRADING](UPGRADING). The fork is independently adapted for the integrated goals above and should not be mistaken for an official Rivendell/Paravel Systems release.
+## Documentation
+
+- [Full requirements and verification status](docs/complete/ACCEPTANCE.md)
+- [Ubuntu 26.04 station setup and qualification](docs/complete/STATION_SETUP.md)
+- [Direct NAS media design and limits](docs/complete/EXTERNAL_MEDIA.md)
+- [Listener request API and safeguards](docs/complete/REQUESTS.md)
+- [Original upstream Rivendell documentation](README)
+- [Upstream installation guidance](INSTALL)
+
+## Origins and licensing
+
+Rivendell Complete is based on the open-source [Rivendell Project](https://github.com/ElvishArtisan/rivendell), created by Fred Gleason and contributors. It is an independent fork, **not** an official Rivendell or Paravel Systems release. Upstream copyright notices and the applicable terms in [`LICENSES/`](LICENSES) are retained. Original project documentation is preserved in [`README`](README).
+
+The project name **Complete** represents the committed product goal; it must not be used to conceal incomplete functionality or unverified deployment claims.
