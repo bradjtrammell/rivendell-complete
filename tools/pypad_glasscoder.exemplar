@@ -1,0 +1,15 @@
+; Rivendell Complete on-air metadata to GlassCoder (source local FIFO)
+[GlassCoder]
+FormatString=%a - %t
+MetadataFifo=/home/studio/.local/state/rivendell-complete/encoder-metadata.fifo
+MasterLog=Onair
+Aux1Log=No
+Aux2Log=No
+VLog101=No
+VLog102=No
+
+[NowGroups]
+; Group1=POWER
+; Group2=GOLD
+
+[NextGroups]
