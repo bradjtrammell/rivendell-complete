@@ -823,7 +823,7 @@ void MainWidget::RunLocalMacros(RDMacro *rml)
     }   
     break;
 
-  case RDMacro::PX:    // Add Next
+  case RDMacro::PX: {  // Add Next: isolate request-safety variables
     if((rml->argQuantity()<2)||(rml->argQuantity()>4)) {
       if(rml->echoRequested()) {
 	rml->acknowledge(false);
@@ -947,6 +947,7 @@ void MainWidget::RunLocalMacros(RDMacro *rml)
       rda->ripc()->sendRml(rml);
     }   
     break;
+  }
 
   case RDMacro::RL:    // Refresh Log
     if(rml->argQuantity()!=1) {
