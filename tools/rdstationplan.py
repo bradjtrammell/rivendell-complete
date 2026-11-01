@@ -243,13 +243,15 @@ def main(argv=None) -> int:
     print(f"Scheduled {len(planned.events)} events, 24 IDs, "
           f"{len(planned.request_ids)} requests; maximum planned gap "
           f"{max(planned.segment_gaps,default=0)}ms",file=sys.stderr)
-    if args.report_json:
-        if args.report_json.exists():
-            raise PlanError("Report exists; refusing overwrite")
-        report=[{"cart":e.cart,"start_ms":e.start_ms,"length_ms":e.length_ms,
-                 "kind":e.kind,"hard":e.hard} for e in planned.events]
-        args.report_json.write_text(json.dumps(report,indent=2)+"\n")
+    report=[{"cart":e.cart,"start_ms":e.start_ms,"length_ms":e.length_ms,
+             "kind":e.kind,"hard":e.hard} for e in planned.events]
+    if args.report_json and (args.report_json.exists() or args.report_json.is_symlink()):
+        raise PlanError("Report exists; refusing overwrite")
     if not args.commit:
+        if args.report_json:
+            if args.report_json.name.endswith(".plan.json"):
+                raise PlanError("Uncommitted preview cannot be named as a live plan")
+            args.report_json.write_text(json.dumps(report,indent=2)+"\n")
         sys.stdout.write(log_commands)
         print("DRY RUN: no logs or request statuses changed",file=sys.stderr)
         return 0
@@ -265,6 +267,16 @@ def main(argv=None) -> int:
     if args.requests_db and planned.request_ids:
         from rdrequests import Store
         Store(args.requests_db).scheduled(planned.request_ids,args.log_name)
+    if args.report_json:
+        # A plan is eligible for live insertion ONLY after its corresponding
+        # Rivendell log has actually been committed successfully.
+        data=(json.dumps(report,indent=2)+"\n").encode("utf-8")
+        import os
+        fd=os.open(args.report_json,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,"wb") as out:
+            out.write(data)
+            out.flush()
+            os.fsync(out.fileno())
     print(f"Created new offline Rivendell log {args.log_name}",file=sys.stderr)
     return 0
 
