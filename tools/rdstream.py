@@ -8,7 +8,11 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import shutil
+import signal
+import subprocess
+import time
 import stat
 import sys
 from urllib.parse import urlsplit
@@ -95,6 +99,7 @@ def configure(args: argparse.Namespace) -> int:
         "jack_client": args.jack_client, "bitrate": args.bitrate,
         "samplerate": args.samplerate, "stream_name": args.stream_name,
         "genre": args.genre,
+        "metadata_enabled": not args.disable_metadata,
     }
     validate_config(config)
     if not args.username or re.search(r"[\x00-\x1f=]", args.username):
@@ -113,6 +118,80 @@ def configure(args: argparse.Namespace) -> int:
     return 0
 
 
+def valid_metadata(value: bytes) -> bytes:
+    """A single text line. No control codes or argument injection."""
+    if not 1 <= len(value) <= 512 or b"\n" in value or b"\r" in value or b"\x00" in value:
+        raise StreamError("Invalid metadata line")
+    try:
+        text = value.decode("utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise StreamError("Metadata must be UTF-8") from exc
+    if any(ord(c) < 32 or ord(c) == 127 for c in text):
+        raise StreamError("Metadata contains control characters")
+    return value
+
+
+def supervise_metadata(command: list[str], fifo: Path) -> int:
+    """Supervise encoder and forward local FIFO lines using documented MD stdin.
+
+    FIFO is accessible only by the studio user. No extra network port.
+    """
+    directory = fifo.parent
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    st = directory.lstat()
+    if stat.S_ISLNK(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise StreamError("Metadata directory has unsafe ownership/permissions")
+    if fifo.exists() or fifo.is_symlink():
+        st = fifo.lstat()
+        if (not stat.S_ISFIFO(st.st_mode) or st.st_uid != os.getuid()
+                or st.st_mode & 0o177):
+            raise StreamError("Refusing unsafe existing metadata FIFO")
+    else:
+        os.mkfifo(fifo, 0o600)
+    child = subprocess.Popen(command, stdin=subprocess.PIPE)
+    assert child.stdin is not None
+    fd = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    buffer = b""
+    try:
+        while child.poll() is None:
+            ready, _, _ = select.select([fd], [], [], 0.5)
+            if not ready:
+                continue
+            piece = os.read(fd, 4096)
+            if not piece:
+                # All writers closed. Reopen rather than spin on EOF.
+                os.close(fd)
+                fd = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+                time.sleep(0.1)
+                continue
+            buffer += piece
+            if len(buffer) > 4096:
+                buffer = b""
+                print("Ignoring oversized metadata line", file=sys.stderr)
+            while b"\n" in buffer:
+                value, buffer = buffer.split(b"\n", 1)
+                try:
+                    value = valid_metadata(value)
+                except StreamError:
+                    continue
+                try:
+                    child.stdin.write(b"MD " + value + b"\n")
+                    child.stdin.flush()
+                except (BrokenPipeError, OSError):
+                    return child.wait()
+        return child.wait()
+    finally:
+        os.close(fd)
+        if child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+        fifo.unlink(missing_ok=True)
+
+
 def start(config_dir: Path, check_only: bool) -> int:
     directory = config_dir.expanduser().absolute()
     config_path, secret_path = directory / "stream.json", directory / "credentials.ini"
@@ -128,6 +207,9 @@ def start(config_dir: Path, check_only: bool) -> int:
         print("Validated GlassCoder configuration; audio routing and server login NOT tested.")
         print(" ".join(command))
         return 0
+    if config.get("metadata_enabled", False):
+        return supervise_metadata(command, directory.parent.parent / ".local" / "state"
+                                  / "rivendell-complete" / "encoder-metadata.fifo")
     os.execvp(command[0], command)
     return 1
 
@@ -147,6 +229,8 @@ def main(argv=None) -> int:
     cfg.add_argument("--samplerate", type=int, default=44100)
     cfg.add_argument("--stream-name", default="")
     cfg.add_argument("--genre", default="")
+    cfg.add_argument("--disable-metadata", action="store_true",
+                     help="Disable protected local FIFO for now-playing text")
     sub.add_parser("verify", help="Check credentials/config and display safe command")
     sub.add_parser("run", help="Exec GlassCoder using protected credentials file")
     args = ap.parse_args(argv)
