@@ -58,7 +58,7 @@ jobs:
             libsoundtouch-dev libjack-jackd2-dev libasound2-dev libflac-dev \
             libflac++-dev libmp3lame-dev libmad0-dev libtwolame-dev \
             libssl-dev libtag1-dev libmagick++-7.q16-dev \
-            libltdl-dev rsync docbook5-xml libxml2-utils docbook-xsl-ns \
+            libltdl-dev rsync apache2 debhelper dh-autoreconf dpkg-dev fakeroot docbook5-xml libxml2-utils docbook-xsl-ns \
             xsltproc fop python3-pycurl python3-requests python3-mysqldb \
             python3-pymysql python3-serial icedax
       - name: Configure and compile native Rivendell 4
@@ -75,3 +75,12 @@ jobs:
           test -x rdlibrary/rdlibrary
           test -x rdadmin/rdadmin
           test -x utils/rdimport/rdimport
+
+      - name: Build native Debian packages (installation qualification)
+        run: |
+          set -eu
+          dpkg-buildpackage --build=binary --no-sign
+          find .. -maxdepth 1 -name '*.deb' -print
+          test -f ../rivendell_4.5.0-1_amd64.deb
+          dpkg-deb --info ../rivendell_4.5.0-1_amd64.deb
+          dpkg-deb --contents ../rivendell_4.5.0-1_amd64.deb | grep '/usr/bin/rdairplay'
