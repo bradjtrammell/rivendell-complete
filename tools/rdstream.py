@@ -99,7 +99,7 @@ def configure(args: argparse.Namespace) -> int:
         "jack_client": args.jack_client, "bitrate": args.bitrate,
         "samplerate": args.samplerate, "stream_name": args.stream_name,
         "genre": args.genre,
-        "metadata_enabled": not args.disable_metadata,
+        "metadata_enabled": not getattr(args, "disable_metadata", False),
     }
     validate_config(config)
     if not args.username or re.search(r"[\x00-\x1f=]", args.username):
