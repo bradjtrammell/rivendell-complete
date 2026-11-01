@@ -202,7 +202,11 @@ def commands(events: list[Event], service: str, day: date, log_name: str) -> str
         lines.append(f"settrans {index} {'play' if event.hard else 'segue'}")
         if event.hard:
             hh = (event.start_ms // HOUR_MS) % 24
-            lines.append(f"settime {index} hard {hh:02d}:00:00")
+            mm = (event.start_ms // 60000) % 60
+            ss = (event.start_ms // 1000) % 60
+            if event.start_ms % 1000:
+                raise PlanError("Hard events must start on an exact second")
+            lines.append(f"settime {index} hard {hh:02d}:{mm:02d}:{ss:02d}")
     lines.extend(["save", "bye"])
     return "\n".join(lines) + "\n"
 
