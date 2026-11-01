@@ -19,6 +19,7 @@
 //
 
 #include <rdapplication.h>
+#include <rdcart.h>
 #include <rddb.h>
 #include <rdescape_string.h>
 #include <rdmacro.h>
@@ -831,11 +832,11 @@ void MainWidget::RunLocalMacros(RDMacro *rml)
       return;
     }
     mach=rml->arg(0).toInt();
-    cart=cart;
+    cart=rml->arg(1).toUInt(&ok);
     offset=0;
     trans=air_default_trans_type;
-    if((mach<1)||(mach>3)||
-       (rml->arg(1).toUInt()>RD_MAX_CART_NUMBER)) {
+    if((mach<1)||(mach>3)||!ok||(cart==0)||
+       (cart>RD_MAX_CART_NUMBER)) {
       if(rml->echoRequested()) {
 	rml->acknowledge(false);
 	rda->ripc()->sendRml(rml);
@@ -844,7 +845,7 @@ void MainWidget::RunLocalMacros(RDMacro *rml)
     }
     if(rml->argQuantity()>=3) {
       offset=rml->arg(2).toInt(&ok);
-      if(!ok) {
+      if(!ok||(offset<0)||(offset>5)) {
 	if(rml->echoRequested()) {
 	  rml->acknowledge(false);
 	  rda->ripc()->sendRml(rml);
@@ -871,15 +872,73 @@ void MainWidget::RunLocalMacros(RDMacro *rml)
 	return;
       }
     }
+    // Rivendell Complete: protected insertions must never displace a hard
+    // timed station ID or a paid commercial break. PX inserts *after* the
+    // currently playing event, which itself can have several minutes left.
+    // Block insertion unless both that time and the requested cart's entire
+    // duration comfortably fit before the next hard event. This conservative
+    // guard applies to every PX invocation, including remote requests.
+    int target_line=air_log[mach-1]->nextLine();
+    if(target_line>=0) {
+      target_line+=offset;
+    }
+    else {
+      target_line=air_log[mach-1]->lineCount();
+    }
+    RDCart requested_cart(cart);
+    if((target_line<0)||(target_line>air_log[mach-1]->lineCount())||
+       (!requested_cart.exists())||(requested_cart.averageLength()==0)) {
+      if(rml->echoRequested()) {
+	rml->acknowledge(false);
+	rda->ripc()->sendRml(rml);
+      }
+      return;
+    }
+    // Six-minute ceiling covers the unknown remainder of the current
+    // event plus a 30-second boundary margin; it is deliberately cautious.
+    const int required_ms=(int)requested_cart.averageLength()+390000;
+    bool protected_boundary=false;
+    for(int i=target_line;i<air_log[mach-1]->lineCount();i++) {
+      RDLogLine *line=air_log[mach-1]->logLine(i);
+      if((line==NULL)||(line->timeType()!=RDLogLine::Hard)) {
+	continue;
+      }
+      if(i==target_line) {
+	protected_boundary=true;
+	break;
+      }
+      QTime deadline=line->startTime(RDLogLine::Imported);
+      if(!deadline.isValid()) {
+	deadline=line->startTime(RDLogLine::Predicted);
+      }
+      if(!deadline.isValid()) {
+	protected_boundary=true;
+	break;
+      }
+      int gap_ms=QTime::currentTime().msecsTo(deadline);
+      if(gap_ms<0) {
+	gap_ms+=86400000;
+      }
+      if(gap_ms<required_ms) {
+	protected_boundary=true;
+      }
+      break;
+    }
+    if(protected_boundary) {
+      rda->syslog(LOG_WARNING,"rejected PX cart %06u: protected hard event",cart);
+      if(rml->echoRequested()) {
+	rml->acknowledge(false);
+	rda->ripc()->sendRml(rml);
+      }
+      return;
+    }
     if(air_log[mach-1]->nextLine()>=0) {
       air_log[mach-1]->
-	insert(air_log[mach-1]->nextLine()+offset,
-	       rml->arg(1).toUInt(),RDLogLine::NoTrans,trans);
+	insert(target_line,cart,RDLogLine::NoTrans,trans);
     }
     else {
       air_log[mach-1]->
-	insert(air_log[mach-1]->lineCount(),
-	       rml->arg(1).toUInt(),RDLogLine::NoTrans,trans);
+	insert(air_log[mach-1]->lineCount(),cart,RDLogLine::NoTrans,trans);
       air_log[mach-1]->
 	makeNext(air_log[mach-1]->lineCount()-1);
     }
