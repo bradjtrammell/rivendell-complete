@@ -87,6 +87,8 @@ class RDConfig
   QString audioRoot() const;
   QString audioExtension() const;
   QString audioFileName (QString cutname);
+  // External-media cuts are read-only. Never use this for imports, edits or deletion.
+  QString playbackAudioFileName(const QString &cutname) const;
   QString label() const;
   QString audioStoreMountSource() const;
   QString audioStoreMountType() const;
@@ -178,6 +180,8 @@ class RDConfig
   int conf_syslog_facility;
   QString conf_audio_root;
   QString conf_audio_extension;
+  QString conf_external_audio_root;
+  QString conf_external_audio_references;
   QString conf_label;
   QString conf_audio_store_mount_source;
   QString conf_audio_store_mount_type;

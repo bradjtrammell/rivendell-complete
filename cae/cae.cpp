@@ -322,8 +322,8 @@ void MainObject::loadPlaybackData(uint64_t phandle,unsigned cardnum,
 					    name.toUtf8().constData()));
     return;
   }
-  wavename=rda->config()->audioFileName(name);
-  if(dvr->loadPlayback(cardnum,wavename,&new_stream)) {
+  wavename=rda->config()->playbackAudioFileName(name);
+  if(!wavename.isEmpty()&&dvr->loadPlayback(cardnum,wavename,&new_stream)) {
     play_sessions[phandle]=new PlaySession(phandle,cardnum,portnum,new_stream);
   }
   else {

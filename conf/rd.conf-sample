@@ -289,3 +289,12 @@ KillPypadAfterJsonError=No
 ; DEBUG priority level.
 ; LogDropboxProcessing=<dropbox-id-1>,<dropbox-id-2>,<dropbox-id-3>
 ;LogDropboxProcessing=27,52,12
+
+; Rivendell Complete: externally referenced, read-only NAS media.
+; Disabled unless both values are set. The Root must be the read-only NAS mount.
+; References is a LOCAL trusted directory containing one <CUT_NAME>.ref file
+; per external cut; file content is a relative UTF-8 path within Root.
+; Never configure Root as / or References inside the music library.
+;[ExternalAudio]
+;Root=/mnt/radio-music
+;References=/var/lib/rivendell/external-media

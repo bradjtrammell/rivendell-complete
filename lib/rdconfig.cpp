@@ -29,6 +29,9 @@
 #include <sys/types.h>
 
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QObject>
 #include <QRegExp>
 #include <QSettings>
@@ -114,6 +117,64 @@ QString RDConfig::audioFileName (QString cutname)
   return audioRoot() + QString("/") + cutname + QString(".") +
     audioExtension();
 };
+
+
+// Resolve a cut's optional external-media reference for PLAYBACK ONLY.
+// Untrusted or missing original paths fail closed and never reach the writer API.
+// All other Rivendell file operations still use audioFileName().
+QString RDConfig::playbackAudioFileName(const QString &cutname) const
+{
+  const QString managed=conf_audio_root+"/"+cutname+"."+conf_audio_extension;
+  if(conf_external_audio_root.isEmpty()||conf_external_audio_references.isEmpty()) {
+    return managed;
+  }
+  QRegExp valid_cut("[0-9]{6}_[0-9]{3}");
+  if(!valid_cut.exactMatch(cutname)) {
+    return QString();
+  }
+  QFileInfo ref_info(conf_external_audio_references+"/"+cutname+".ref");
+  if(ref_info.isSymLink()) {
+    return QString();
+  }
+  if(!ref_info.exists()) {
+    return managed;
+  }
+  if(!ref_info.isFile()||!ref_info.isReadable()||ref_info.size()>4096) {
+    return QString();
+  }
+  QFile reference(ref_info.absoluteFilePath());
+  if(!reference.open(QIODevice::ReadOnly)) {
+    return QString();
+  }
+  QByteArray raw=reference.readAll();
+  if(raw.isEmpty()||raw.size()>4096||raw.contains('\\0')||raw.contains('\\r')) {
+    return QString();
+  }
+  if(raw.endsWith('\\n')) {
+    raw.chop(1);
+  }
+  if(raw.contains('\\n')) {
+    return QString();
+  }
+  QString relative=QString::fromUtf8(raw);
+  if(relative.toUtf8()!=raw||relative.isEmpty()||
+     QDir::isAbsolutePath(relative)||relative.startsWith("../")||
+     relative.contains("/../")||relative.contains("\\\\")||
+     QDir::cleanPath(relative)!=relative||relative==".") {
+    return QString();
+  }
+  const QString root=QDir(conf_external_audio_root).canonicalPath();
+  if(root.isEmpty()||root=="/") {
+    return QString();
+  }
+  QFileInfo target(QDir(root).filePath(relative));
+  const QString canonical=target.canonicalFilePath();
+  if(canonical.isEmpty()||!canonical.startsWith(root+"/")||
+     !target.isFile()||!target.isReadable()) {
+    return QString();
+  }
+  return canonical;
+}
 
 
 QString RDConfig::label() const
@@ -662,6 +723,10 @@ bool RDConfig::load()
     profile->stringValue("Cae","AudioRoot",RD_AUDIO_ROOT);
   conf_audio_extension=
     profile->stringValue("Cae","AudioExtension",RD_AUDIO_EXTENSION);
+  conf_external_audio_root=
+    profile->stringValue("ExternalAudio","Root");
+  conf_external_audio_references=
+    profile->stringValue("ExternalAudio","References");
   conf_mysql_hostname=
     profile->stringValue("mySQL","Hostname",DEFAULT_MYSQL_HOSTNAME);
   conf_mysql_username=
@@ -845,6 +910,8 @@ void RDConfig::clear()
   conf_syslog_facility=LOG_USER;
   conf_audio_root=RD_AUDIO_ROOT;
   conf_audio_extension=RD_AUDIO_EXTENSION;
+  conf_external_audio_root="";
+  conf_external_audio_references="";
   conf_label=RD_DEFAULT_LABEL;
   conf_audio_store_mount_source="";
   conf_audio_store_mount_type="";
