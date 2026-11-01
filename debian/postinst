@@ -32,7 +32,15 @@ case "$1" in
       #
       # FIXME: Configure ALSA Here!
       #
-      /usr/sbin/rddbmgr --modify
+      # Rivendell Complete fresh standalone installs stage this marker only
+      # after creating a brand-new empty database. Existing installations
+      # retain upstream --modify behavior.
+      if test -f /etc/rivendell.d/rdcomplete-first-install ; then
+          /usr/sbin/rddbmgr --create || exit 1
+          rm -f /etc/rivendell.d/rdcomplete-first-install
+      else
+          /usr/sbin/rddbmgr --modify || exit 1
+      fi
       /bin/systemctl restart rivendell
       /bin/systemctl enable rivendell
       ln -f -s ../conf-available/rd-bin.conf /etc/apache2/conf-enabled/rd-bin.conf
