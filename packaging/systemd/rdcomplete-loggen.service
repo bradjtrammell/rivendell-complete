@@ -1,0 +1,13 @@
+[Unit]
+Description=Rivendell Complete - protected future log generation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/rivendell-complete/loggen.env
+ExecStart=%h/.local/bin/rdcomplete-loggen --service ${RD_SERVICE} --days 7
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+TimeoutStartSec=18min
