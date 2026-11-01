@@ -1,0 +1,73 @@
+name: Rivendell Complete CI
+
+on:
+  push:
+    branches:
+      - v4
+      - feat/**
+  pull_request:
+    branches:
+      - v4
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-media-tests:
+    name: External media safety tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install ffprobe
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Check Python and run tests
+        run: |
+          python3 -m py_compile tools/rdexternal.py tests/test_rdexternal.py
+          python3 -m unittest discover -s tests -p 'test_rdexternal.py' -v
+
+  ubuntu26-native-build:
+    name: Ubuntu 26.04 native source build
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04
+    timeout-minutes: 55
+    steps:
+      - name: Install bootstrap tools
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Verify Ubuntu release and install native build dependencies
+        run: |
+          set -eu
+          . /etc/os-release
+          test "$ID" = ubuntu && test "$VERSION_ID" = 26.04
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get install -y --no-install-recommends \
+            build-essential autoconf automake autoconf-archive autotools-dev libtool \
+            pkgconf libexpat1-dev libid3-dev libcurl4-gnutls-dev libcoverart-dev \
+            libdiscid-dev libmusicbrainz5-dev libcdparanoia-dev libsndfile1-dev \
+            libpam0g-dev libvorbis-dev libsamplerate0-dev qtbase5-dev \
+            qttools5-dev-tools libqt5sql5-mysql qtwebengine5-dev \
+            libsoundtouch-dev libjack-jackd2-dev libasound2-dev libflac-dev \
+            libflac++-dev libmp3lame-dev libmad0-dev libtwolame-dev \
+            libssl-dev libtag1-dev libmagick++-7.q16-dev \
+            libltdl-dev rsync docbook5-xml libxml2-utils docbook-xsl-ns \
+            xsltproc fop python3-pycurl python3-requests python3-mysqldb \
+            python3-pymysql python3-serial icedax
+      - name: Configure and compile native Rivendell 4
+        run: |
+          set -eu
+          ./autogen.sh
+          ./configure --prefix=/usr --disable-docbook \
+            MUSICBRAINZ_LIBS="-ldiscid -lmusicbrainz5cc -lcoverartcc"
+          make -j2
+      - name: Check built application programs
+        run: |
+          test -x rdairplay/rdairplay
+          test -x rdlogmanager/rdlogmanager
+          test -x rdlibrary/rdlibrary
+          test -x rdadmin/rdadmin
+          test -x utils/rdimport/rdimport
