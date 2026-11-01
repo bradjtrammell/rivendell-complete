@@ -20,7 +20,7 @@
 
 #include <QEvent>
 #include <QKeyEvent>
-#include <QWebFrame>
+#include <QWebEngineSettings>
 
 #include <rdapplication.h>
 #include <rdeventfilter.h>
@@ -49,7 +49,7 @@ MessageWidget::MessageWidget(QWidget *parent)
   d_label=new QLabel(this);
   d_label->setWordWrap(true);
   d_label->setAlignment(Qt::AlignCenter);
-  d_view=new QWebView(this);
+  d_view=new QWebEngineView(this);
   connect(d_view,SIGNAL(loadFinished(bool)),
 	  this,SLOT(webLoadFinishedData(bool)));
   d_view->hide();
@@ -144,16 +144,14 @@ void MessageWidget::clear()
 
 void MessageWidget::webLoadFinishedData(bool state)
 {
-  d_view->page()->mainFrame()->
-    setScrollBarPolicy(Qt::Horizontal,Qt::ScrollBarAlwaysOff);
-  d_view->page()->mainFrame()->
-    setScrollBarPolicy(Qt::Vertical,Qt::ScrollBarAlwaysOff);
+  (void)state;
+  d_view->settings()->setAttribute(QWebEngineSettings::ShowScrollBars,false);
 }
 
 
 void MessageWidget::refreshData()
 {
-  d_view->load(d_url);
+  d_view->load(QUrl(d_url));
   d_refresh_timer->start(1000);
 }
 

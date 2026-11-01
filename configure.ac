@@ -93,7 +93,7 @@ AC_ARG_ENABLE(i18n-updates,[  --enable-i18n-updates   enable I18N metadata updat
 #
 # Check for Qt5 (Mandatory)
 #
-PKG_CHECK_MODULES(QT5,Qt5Core Qt5Widgets Qt5Gui Qt5Network Qt5Sql Qt5Xml Qt5WebKitWidgets,,[AC_MSG_ERROR([*** Qt5 not found ***])])
+PKG_CHECK_MODULES(QT5,Qt5Core Qt5Widgets Qt5Gui Qt5Network Qt5Sql Qt5Xml Qt5WebEngineWidgets,,[AC_MSG_ERROR([*** Qt5 not found ***])])
 PKG_CHECK_MODULES(QT5_CLI,Qt5Core Qt5Network Qt5Sql Qt5Xml,,[AC_MSG_ERROR([*** Qt5 not found ***])])
 AC_CHECK_PROG(MOC_NAME,moc-qt5,[moc-qt5],[moc])
 AC_SUBST(QT_MOC,$MOC_NAME)
@@ -350,7 +350,7 @@ AC_CHECK_HEADER(soundtouch/SoundTouch.h,[],[AC_MSG_ERROR([*** SoundTouch not fou
 #
 # Check for ImageMagick
 #
-PKG_CHECK_MODULES(IMAGEMAGICK,Magick++-6.Q16,[],[AC_MSG_ERROR([*** ImageMagick 6 Magick++ binding not found ***])])
+PKG_CHECK_MODULES(IMAGEMAGICK,Magick++-7.Q16,[],[AC_MSG_ERROR([*** ImageMagick 7 Magick++ binding not found ***])])
 
 #
 # Check for Python

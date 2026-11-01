@@ -5,10 +5,10 @@ case "$1" in
     configure)
       ldconfig
       /bin/systemctl daemon-reload
-      /usr/sbin/groupadd -r -g 150 rivendell
-      /usr/sbin/useradd -o -u 150 -g rivendell -s /bin/false -r -c "Rivendell radio automation system" -d /var/snd rivendell
-      /usr/sbin/groupadd -r -g 151 pypad
-      /usr/sbin/useradd -o -u 151 -g pypad -s /bin/false -r -c "Rivendell PyPAD scripts" -d /dev/null pypad
+      getent group rivendell >/dev/null || /usr/sbin/groupadd -r rivendell
+      id -u rivendell >/dev/null 2>&1 || /usr/sbin/useradd -g rivendell -s /usr/sbin/nologin -r -c "Rivendell radio automation system" -d /var/snd rivendell
+      getent group pypad >/dev/null || /usr/sbin/groupadd -r pypad
+      id -u pypad >/dev/null 2>&1 || /usr/sbin/useradd -g pypad -s /usr/sbin/nologin -r -c "Rivendell PyPAD scripts" -d /nonexistent pypad
       if test ! -e /var/snd ; then
 	  mkdir -p /var/snd
 	  chown rivendell:rivendell /var/snd
