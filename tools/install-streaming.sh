@@ -5,7 +5,7 @@ set -Eeuo pipefail
 source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || { echo "Ubuntu 26.04 required" >&2; exit 1; }
 here="$(cd "$(dirname "$0")" && pwd -P)"
-[[ -f "$here/rdstream.py" && -f "$here/../packaging/systemd/rdcomplete-stream.service" ]] || {
+[[ -f "$here/rdstream.py" && -f "$here/rdmetadata.py" && -f "$here/../packaging/systemd/rdcomplete-stream.service" ]] || {
   echo "Run from the checked-out Rivendell Complete source tree" >&2
   exit 1
 }
@@ -13,6 +13,7 @@ sudo apt-get update
 sudo apt-get install -y --no-install-recommends glasscoder
 install -d -m 0700 "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 0755 "$here/rdstream.py" "$HOME/.local/bin/rdcomplete-stream"
+install -m 0755 "$here/rdmetadata.py" "$HOME/.local/bin/rdcomplete-metadata"
 install -m 0644 "$here/../packaging/systemd/rdcomplete-stream.service" \
   "$HOME/.config/systemd/user/rdcomplete-stream.service"
 systemctl --user daemon-reload
