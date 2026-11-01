@@ -15,6 +15,7 @@ install -d -m 0700 "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 0755 "$here/rdstream.py" "$HOME/.local/bin/rdcomplete-stream"
 install -m 0755 "$here/rdmetadata.py" "$HOME/.local/bin/rdcomplete-metadata"
 install -m 0755 "$here/pypad_glasscoder.py" "$HOME/.local/bin/pypad_glasscoder.py"
+install -m 0755 "$here/rdsweepers.py" "$HOME/.local/bin/rdsweepers.py"
 install -m 0644 "$here/../packaging/systemd/rdcomplete-stream.service" \
   "$HOME/.config/systemd/user/rdcomplete-stream.service"
 systemctl --user daemon-reload
