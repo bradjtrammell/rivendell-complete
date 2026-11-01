@@ -157,13 +157,20 @@ def write_reference(refs: Path, cut: str, relative: str) -> Path:
             output.flush()
             os.fsync(output.fileno())
         # Refuse concurrent insertion: no overwrites (atomic hard link).
-        os.link(tmp, dest, follow_symlinks=False)
-        os.unlink(tmp)
-        dirfd = os.open(refs, os.O_RDONLY | os.O_DIRECTORY)
+        linked = False
         try:
-            os.fsync(dirfd)
-        finally:
-            os.close(dirfd)
+            os.link(tmp, dest, follow_symlinks=False)
+            linked = True
+            os.unlink(tmp)
+            dirfd = os.open(refs, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(dirfd)
+            finally:
+                os.close(dirfd)
+        except Exception:
+            if linked:
+                dest.unlink(missing_ok=True)
+            raise
         return dest
     finally:
         if os.path.exists(tmp):
@@ -219,15 +226,22 @@ def insert_cart(conn, cart: int, group: str, track: Track) -> None:
             "VALUES (%s,1,%s,%s,%s,%s,%s,%s,1,2)",
             (cart, group, track.title, track.artist, track.album,
              track.length_ms, track.length_ms))
-        cur.execute(
-            "INSERT INTO CUTS "
-            "(CUT_NAME,CART_NUMBER,DESCRIPTION,LENGTH,ORIGIN_DATETIME,"
-            "CODING_FORMAT,SAMPLE_RATE,BIT_RATE,CHANNELS,START_POINT,"
-            "END_POINT,SEGUE_START_POINT,SEGUE_END_POINT,VALIDITY) "
-            "VALUES (%s,%s,%s,%s,NOW(),%s,%s,%s,%s,0,%s,0,%s,2)",
-            (cut, cart, track.title[:64], track.length_ms, track.coding,
-             track.sample_rate, track.bitrate, track.channels,
-             track.length_ms, track.length_ms))
+        try:
+            cur.execute(
+                "INSERT INTO CUTS "
+                "(CUT_NAME,CART_NUMBER,DESCRIPTION,LENGTH,ORIGIN_DATETIME,"
+                "CODING_FORMAT,SAMPLE_RATE,BIT_RATE,CHANNELS,START_POINT,"
+                "END_POINT,SEGUE_START_POINT,SEGUE_END_POINT,VALIDITY) "
+                "VALUES (%s,%s,%s,%s,NOW(),%s,%s,%s,%s,0,%s,0,%s,2)",
+                (cut, cart, track.title[:64], track.length_ms, track.coding,
+                 track.sample_rate, track.bitrate, track.channels,
+                 track.length_ms, track.length_ms))
+        except Exception:
+            # Important for upstream MyISAM installs: a CUTS insertion may fail
+            # after CART insertion has already become persistent.
+            cur.execute("DELETE FROM CART WHERE NUMBER=%s", (cart,))
+            conn.commit()
+            raise
 
 
 def main(argv=None) -> int:
@@ -300,18 +314,21 @@ def main(argv=None) -> int:
                 raise ImportFailure("Ran out of cart numbers")
             cut = f"{next_cart:06d}_001"
             ref_path = None
+            db_inserted = False
             try:
                 insert_cart(conn, next_cart, args.group, track)
+                db_inserted = True
                 ref_path = write_reference(refs, cut, track.relative)
                 conn.commit()
             except Exception:
                 conn.rollback()
                 # Rivendell defaults to MyISAM, so clean up any partially
                 # inserted records explicitly. Do not touch pre-existing carts.
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM CUTS WHERE CUT_NAME=%s", (cut,))
-                    cur.execute("DELETE FROM CART WHERE NUMBER=%s", (next_cart,))
-                conn.commit()
+                if db_inserted:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM CUTS WHERE CUT_NAME=%s", (cut,))
+                        cur.execute("DELETE FROM CART WHERE NUMBER=%s", (next_cart,))
+                    conn.commit()
                 if ref_path is not None and ref_path.exists():
                     ref_path.unlink()
                 raise
