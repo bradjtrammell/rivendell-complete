@@ -10,14 +10,16 @@ here="$(cd "$(dirname "$0")" && pwd -P)"
   exit 1
 }
 sudo apt-get update
-sudo apt-get install -y --no-install-recommends glasscoder
+sudo apt-get install -y --no-install-recommends glasscoder jack-tools jackd2
 install -d -m 0700 "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 0755 "$here/rdstream.py" "$HOME/.local/bin/rdcomplete-stream"
 install -m 0755 "$here/rdmetadata.py" "$HOME/.local/bin/rdcomplete-metadata"
 install -m 0755 "$here/pypad_glasscoder.py" "$HOME/.local/bin/pypad_glasscoder.py"
 install -m 0755 "$here/rdsweepers.py" "$HOME/.local/bin/rdsweepers.py"
+install -m 0755 "$here/rdjackroute.py" "$HOME/.local/bin/rdcomplete-jack-route"
 install -m 0644 "$here/../packaging/systemd/rdcomplete-stream.service" \
   "$HOME/.config/systemd/user/rdcomplete-stream.service"
+install -m 0644 "$here/../packaging/systemd/rdcomplete-jack-route.service" "$HOME/.config/systemd/user/rdcomplete-jack-route.service"
 systemctl --user daemon-reload
 echo "Encoder installed, NOT started."
 echo "Configure: ~/.local/bin/rdcomplete-stream configure --server-type Shout2 --server-url http://HOST:PORT/ --username source"
@@ -26,3 +28,7 @@ echo "Then: systemctl --user enable --now rdcomplete-stream.service"
 echo "Route JACK outputs into the glasscoder input ports; verify on a PRIVATE test stream."
 echo "Create a PyPAD GlassCoder instance in RDAdmin; script: ~/.local/bin/pypad_glasscoder.py"
 echo "Set its MetadataFifo path to ~/.local/state/rivendell-complete/encoder-metadata.fifo"
+
+echo "Discover actual JACK audio ports: ~/.local/bin/rdcomplete-jack-route --discover"
+echo "Configure stereo: rdcomplete-jack-route --set SRC_LEFT DEST_LEFT SRC_RIGHT DEST_RIGHT"
+echo "Enable reconnection: systemctl --user enable --now rdcomplete-jack-route.service"
