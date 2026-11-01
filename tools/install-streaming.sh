@@ -14,6 +14,7 @@ sudo apt-get install -y --no-install-recommends glasscoder
 install -d -m 0700 "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 0755 "$here/rdstream.py" "$HOME/.local/bin/rdcomplete-stream"
 install -m 0755 "$here/rdmetadata.py" "$HOME/.local/bin/rdcomplete-metadata"
+install -m 0755 "$here/pypad_glasscoder.py" "$HOME/.local/bin/pypad_glasscoder.py"
 install -m 0644 "$here/../packaging/systemd/rdcomplete-stream.service" \
   "$HOME/.config/systemd/user/rdcomplete-stream.service"
 systemctl --user daemon-reload
@@ -22,3 +23,5 @@ echo "Configure: ~/.local/bin/rdcomplete-stream configure --server-type Shout2 -
 echo "Validate: ~/.local/bin/rdcomplete-stream verify"
 echo "Then: systemctl --user enable --now rdcomplete-stream.service"
 echo "Route JACK outputs into the glasscoder input ports; verify on a PRIVATE test stream."
+echo "Create a PyPAD GlassCoder instance in RDAdmin; script: ~/.local/bin/pypad_glasscoder.py"
+echo "Set its MetadataFifo path to ~/.local/state/rivendell-complete/encoder-metadata.fifo"
