@@ -1,3 +1,19 @@
+RIVENDELL COMPLETE — PROJECT IDENTITY
+
+Rivendell Complete is a full radio automation system for INTERNET RADIO
+STATIONS and TERRESTRIAL RADIO STATIONS, based on Rivendell 4. It is intended
+to integrate station playout, scheduling, station imaging and commercial clocks,
+BUILT-IN LISTENER REQUESTS, SHOUTcast/Icecast STREAM ENCODING, and DIRECT
+READ-ONLY PLAYBACK OF ORIGINAL MUSIC FILES FROM EXISTING NFS/SMB NAS SHARES.
+
+See README.md for the authoritative project overview, feature status and
+user-facing scope, and docs/complete/ACCEPTANCE.md for all binding requirements
+and acceptance checks. This development branch is NOT production qualified.
+
+The following text is preserved from upstream Rivendell documentation.
+
+------------------------------------------------------------------------
+
 This is the README file for the Rivendell package.
 
 This software comes with ABSOLUTELY NO WARRANTY. See the files in the
