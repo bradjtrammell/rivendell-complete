@@ -23,8 +23,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Check Python and run tests
         run: |
-          python3 -m py_compile tools/rdexternal.py tests/test_rdexternal.py
-          python3 -m unittest discover -s tests -p 'test_rdexternal.py' -v
+          python3 -m py_compile tools/rdexternal.py tools/rdstream.py tests/test_rdexternal.py tests/test_rdstream.py
+          bash -n tools/install-ubuntu26.sh tools/install-streaming.sh
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
 
   ubuntu26-native-build:
     name: Ubuntu 26.04 native source build
