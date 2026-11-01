@@ -6,7 +6,11 @@ build:
 	 ./configure --prefix=/usr --libdir=/usr/lib --libexecdir=/var/www/rd-bin --sysconfdir=/etc/apache2/conf-available MUSICBRAINZ_LIBS="-ldiscid -lmusicbrainz5cc -lcoverartcc"
 	make $(DEBUILD_MAKE_ARGS)
 
-binary:	
+# Debian's dpkg-buildpackage --build=binary invokes 'binary' directly.
+# Its dependency MUST compile the audio applications and shared libraries
+# before dh_auto_install populates debian/tmp; otherwise librivwebcapi.so.*
+# has not yet been built and the packaging move fails at line 15.
+binary: build
 	dh_testroot
 	dh_prep
 	dh_auto_install
