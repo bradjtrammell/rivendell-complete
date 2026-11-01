@@ -3,7 +3,7 @@ set -Eeuo pipefail
 [[ "$EUID" -ne 0 ]] || { echo "Run as desktop station user" >&2; exit 1; }
 source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || { echo "Ubuntu 26.04 required" >&2; exit 1; }
-[[ "$#" -eq 1 && "$1" =~ ^[a-zA-Z0-9_-]{1,10}$ ]] || { echo "Usage: $0 EXISTING_RD_SERVICE" >&2; exit 1; }
+[[ "$#" -eq 1 && "$1" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,9}$ ]] || { echo "Usage: $0 EXISTING_RD_SERVICE" >&2; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 ROOT="$(cd "$HERE/.." && pwd -P)"
 command -v rdlogmanager >/dev/null || { echo "Install Rivendell first" >&2; exit 1; }
