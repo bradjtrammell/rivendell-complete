@@ -147,19 +147,19 @@ QString RDConfig::playbackAudioFileName(const QString &cutname) const
     return QString();
   }
   QByteArray raw=reference.readAll();
-  if(raw.isEmpty()||raw.size()>4096||raw.contains('\\0')||raw.contains('\\r')) {
+  if(raw.isEmpty()||raw.size()>4096||raw.contains('\0')||raw.contains('\r')) {
     return QString();
   }
-  if(raw.endsWith('\\n')) {
+  if(raw.endsWith('\n')) {
     raw.chop(1);
   }
-  if(raw.contains('\\n')) {
+  if(raw.contains('\n')) {
     return QString();
   }
   QString relative=QString::fromUtf8(raw);
   if(relative.toUtf8()!=raw||relative.isEmpty()||
      QDir::isAbsolutePath(relative)||relative.startsWith("../")||
-     relative.contains("/../")||relative.contains("\\\\")||
+     relative.contains("/../")||relative.contains("\\")||
      QDir::cleanPath(relative)!=relative||relative==".") {
     return QString();
   }
