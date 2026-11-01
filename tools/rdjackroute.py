@@ -85,6 +85,8 @@ def main(argv=None)->int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--config",type=Path,default=Path.home()/".config/rivendell-complete/jack-route.json")
     p.add_argument("--discover",action="store_true")
+    p.add_argument("--set",nargs=4,metavar=("SRC_L","DST_L","SRC_R","DST_R"),
+                   help="Save a new validated stereo connection file")
     p.add_argument("--check",action="store_true")
     p.add_argument("--once",action="store_true")
     p.add_argument("--interval",type=int,default=5)
@@ -92,6 +94,25 @@ def main(argv=None)->int:
     if args.discover:
         for name,properties in sorted(ports().items()):
             print(f"{name} [{','.join(sorted(properties))}]")
+        return 0
+    if args.set is not None:
+        src_l,dst_l,src_r,dst_r=args.set
+        routes=[[src_l,dst_l],[src_r,dst_r]]
+        problems=reconcile(routes,check_only=True)
+        if problems:
+            raise RouteError("; ".join(problems))
+        dest=args.config.expanduser().absolute()
+        dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        if dest.exists() or dest.is_symlink():
+            raise RouteError("JACK configuration already exists; refusing overwrite")
+        import os
+        payload=(json.dumps({"connections":routes},indent=2)+"\n").encode()
+        fd=os.open(dest,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+        with os.fdopen(fd,"wb") as out:
+            out.write(payload)
+            out.flush()
+            os.fsync(out.fileno())
+        print(f"Saved stereo JACK routes: {dest}")
         return 0
     if not 2<=args.interval<=60:
         raise RouteError("Reconnect interval must be 2-60 seconds")
