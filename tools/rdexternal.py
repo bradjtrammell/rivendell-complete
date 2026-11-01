@@ -149,9 +149,14 @@ def write_reference(refs: Path, cut: str, relative: str) -> Path:
         raise ImportFailure(f"Reference already exists: {dest}")
     if len(relative.encode()) + 1 > 4096 or INVALID.search(relative):
         raise ImportFailure("Reference path too long or contains control characters")
+    # The reference directory is normally root:rivendell (0750). Reference
+    # files must inherit that group, or CAE running as rivendell cannot read
+    # the path despite a valid cart record and readable original NAS file.
+    parent = refs.stat()
     fd, tmp = tempfile.mkstemp(prefix=".rdexternal-", dir=refs)
     try:
         with os.fdopen(fd, "wb") as output:
+            os.fchown(output.fileno(), -1, parent.st_gid)
             os.fchmod(output.fileno(), 0o640)
             output.write(relative.encode("utf-8") + b"\n")
             output.flush()
