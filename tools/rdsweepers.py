@@ -83,6 +83,13 @@ class SweeperBridge:
         self.lock=threading.Lock()
         self.timer:threading.Timer|None=None
 
+    def cancel(self) -> None:
+        """Cancel a pending overlay if a legal ID, spot, or stop replaces music."""
+        with self.lock:
+            if self.timer is not None:
+                self.timer.cancel()
+                self.timer=None
+
     def on_song(self, cart: int) -> int|None:
         # Song starts must be triggered by PyPAD TYPE_NOW, not wall clock.
         with self.lock:
@@ -132,7 +139,10 @@ def main()->int:
     delay=parser.getint(section,"DelayMs",fallback=500)
     bridge=SweeperBridge(path,every,delay)
     def on_pad(update):
-        if not update.hasPadType(pypad.TYPE_NOW) or not update.shouldBeProcessed(section):
+        if not update.hasPadType(pypad.TYPE_NOW):
+            return
+        if not update.shouldBeProcessed(section):
+            bridge.cancel()
             return
         try:
             cart=int(update.resolvePadFields("%n",pypad.ESCAPE_NONE))
