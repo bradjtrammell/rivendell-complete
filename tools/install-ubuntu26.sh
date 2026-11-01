@@ -91,7 +91,8 @@ for package in "$PKG" "$PKG_WEB"; do
   [[ "$(dpkg-deb -f "$package" Architecture)" == amd64 ]] || fail "Wrong architecture: $package"
   [[ "$(dpkg-deb -f "$package" Version)" == 4.5.0-1 ]] || fail "Wrong version: $package"
 done
-dpkg-deb --contents "$PKG" | grep -q '/usr/bin/rdairplay
+dpkg-deb --contents "$PKG" | grep '/usr/bin/rdairplay$' >/dev/null ||
+  fail 'Main package is missing RDAirPlay'
 if [[ "$MODE" == build ]]; then
   log "Built $PKG. No Rivendell database/application installed."
   exit 0
@@ -147,65 +148,6 @@ sudo install -o root -g root -m 0600 /dev/null /etc/rivendell.d/rdcomplete-first
 unset DB_SECRET SERVICE_SECRET
 sudo usermod -aG rivendell "$(id -un)"
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$PKG_WEB" "$PKG"
-for exe in rdadmin rdairplay rdlibrary rdlogmanager rdimport rddbmgr; do
-  command -v "$exe" >/dev/null || fail "Installed executable missing: $exe"
-done
-log 'Installed application/database; NOT BROADCAST-QUALIFIED.'
-log 'Log out/in, configure audio and service in RDAdmin, mount NAS read-only.'
-log 'Then add [ExternalAudio] Root and References to /etc/rd.conf and index with rdexternal.py.'
- ||
-  fail 'Main package is missing RDAirPlay'
-if [[ "$MODE" == build ]]; then
-  log "Built $PKG. No Rivendell database/application installed."
-  exit 0
-fi
-
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mariadb-server
-sudo systemctl enable --now mariadb
-SCHEMA="$(sudo mariadb -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'")"
-[[ -z "$SCHEMA" ]] || fail 'Existing Rivendell DB detected; refusing overwrite'
-for account in rivendell pypad; do
-  getent group "$account" >/dev/null || sudo groupadd --system "$account"
-  id -u "$account" >/dev/null 2>&1 || sudo useradd --system --gid "$account" --shell /usr/sbin/nologin --home-dir /nonexistent "$account"
-done
-DB_SECRET="$(openssl rand -hex 32)"
-SERVICE_SECRET="$(openssl rand -hex 32)"
-[[ -n "$DB_SECRET" && -n "$SERVICE_SECRET" ]] || fail 'Secure random generation failed'
-sudo mariadb <<SQL
-CREATE DATABASE \`Rivendell\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
-CREATE USER IF NOT EXISTS 'rduser'@'localhost' IDENTIFIED BY '$DB_SECRET';
-ALTER USER 'rduser'@'localhost' IDENTIFIED BY '$DB_SECRET';
-GRANT ALL PRIVILEGES ON \`Rivendell\`.* TO 'rduser'@'localhost';
-SQL
-sudo install -d -o root -g rivendell -m 0750 /etc/rivendell.d
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
-RD_DB_SECRET="$DB_SECRET" RD_SERVICE_SECRET="$SERVICE_SECRET" python3 - "$ROOT/conf/rd.conf-sample" "$TMP" <<'PY'
-import os, re, sys
-from pathlib import Path
-s = Path(sys.argv[1]).read_text()
-for section, name in (("Identity", "RD_SERVICE_SECRET"), ("mySQL", "RD_DB_SECRET")):
-    m = re.search(r"(?ms)^\[" + re.escape(section) + r"\]\n(.*?)(?=^\[|\Z)", s)
-    if m is None:
-        raise SystemExit("Configuration section missing: " + section)
-    body, n = re.subn(r"(?m)^Password=.*$", lambda _: "Password=" + os.environ[name], m.group(1))
-    if n != 1:
-        raise SystemExit("Unexpected upstream password configuration")
-    s = s[:m.start(1)] + body + s[m.end(1):]
-s = s.replace(";Engine=MyISAM", "Engine=InnoDB")
-Path(sys.argv[2]).write_text(s)
-PY
-sudo install -o root -g rivendell -m 0640 "$TMP" /etc/rivendell.d/rd-default.conf
-sudo ln -s /etc/rivendell.d/rd-default.conf /etc/rd.conf
-sudo install -o root -g root -m 0600 /dev/null /etc/rivendell.d/rdcomplete-first-install
-unset DB_SECRET SERVICE_SECRET
-sudo usermod -aG rivendell "$(id -un)"
-PLAN="$(sudo apt-get -s install "$PKG")" || fail 'Package transaction not satisfiable'
-if grep -q '^Remv ' <<<"$PLAN"; then
-  printf '%s\n' "$PLAN" >&2
-  fail 'Refusing transaction that would remove installed packages'
-fi
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$PKG"
 for exe in rdadmin rdairplay rdlibrary rdlogmanager rdimport rddbmgr; do
   command -v "$exe" >/dev/null || fail "Installed executable missing: $exe"
 done
