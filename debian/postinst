@@ -15,9 +15,10 @@ case "$1" in
 	  chmod 775 /var/snd
       fi
       if test ! -d /etc/rivendell.d ; then
-	  mkdir -p /etc/rivendell.d
-	  chmod 775 /etc/rivendell.d
+          mkdir -p /etc/rivendell.d
       fi
+      chown root:rivendell /etc/rivendell.d
+      chmod 750 /etc/rivendell.d
       if test ! -e /etc/rd.conf ; then
 	  cp /usr/share/rivendell/rd.conf-sample /etc/rivendell.d/rd-default.conf
 	  ln -s /etc/rivendell.d/rd-default.conf /etc/rd.conf
