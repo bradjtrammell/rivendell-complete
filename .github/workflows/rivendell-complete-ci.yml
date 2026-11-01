@@ -26,7 +26,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Check Python and run tests
         run: |
-          python3 -m py_compile tools/rdexternal.py tools/rdcatalog.py tools/rdsmartclock.py tools/rdstationplan.py tools/rdstream.py tools/rdmetadata.py tools/rdrequests.py tools/rdloggen.py tests/test_rdexternal.py tests/test_rdcatalog.py tests/test_rdsmartclock.py tests/test_rdstationplan.py tests/test_rdstream.py tests/test_rdmetadata.py tests/test_rdrequests.py tests/test_rdloggen.py
+          python3 -m py_compile tools/rdexternal.py tools/rdcatalog.py tools/rdsmartclock.py tools/rdstationplan.py tools/rdstream.py tools/rdmetadata.py tools/pypad_glasscoder.py tools/rdrequests.py tools/rdloggen.py tests/test_rdexternal.py tests/test_rdcatalog.py tests/test_rdsmartclock.py tests/test_rdstationplan.py tests/test_rdstream.py tests/test_rdmetadata.py tests/test_rdrequests.py tests/test_rdloggen.py
           bash -n tools/install-ubuntu26.sh tools/install-streaming.sh tools/install-loggen.sh tools/setup-nas.sh tools/install-requests.sh
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
