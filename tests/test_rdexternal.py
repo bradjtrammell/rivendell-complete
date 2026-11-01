@@ -53,6 +53,9 @@ class ExternalMediaTests(unittest.TestCase):
     def test_reference_is_immutable_and_recoverable(self):
         ref = module.write_reference(self.refs, "100123_001", "Power/Test Track.wav")
         self.assertEqual(ref.read_bytes(), b"Power/Test Track.wav\n")
+        self.assertEqual(ref.stat().st_gid, self.refs.stat().st_gid,
+                         "Audio-daemon group must be able to read index")
+        self.assertEqual(ref.stat().st_mode & 0o777, 0o640)
         self.assertEqual(module.references(self.refs), {"Power/Test Track.wav": 100123})
         with self.assertRaises(module.ImportFailure):
             module.write_reference(self.refs, "100123_001", "Power/Test Track.wav")
