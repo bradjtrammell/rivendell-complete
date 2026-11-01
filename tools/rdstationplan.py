@@ -46,8 +46,12 @@ def cart_spec(item: dict, label: str) -> tuple[int, int]:
 
 
 def validate(cfg: dict) -> dict:
-    settings(cfg)
-    cart_spec(cfg.get("top_hour"), "top_hour")
+    if not isinstance(cfg, dict):
+        raise PlanError("Configuration must be a JSON object")
+    cart, _ = cart_spec(cfg.get("top_hour"), "top_hour")
+    # Reuse the original validated rotation/separation schema while
+    # accepting the richer {cart,duration_ms} station-ID declaration.
+    settings({**cfg, "top_hour_cart":cart})
     for key in ("max_segment_gap_ms", "max_requests_per_hour"):
         val = cfg.get(key, 0)
         if type(val) is not int or val < 0 or val > (30000 if key == "max_segment_gap_ms" else 6):
