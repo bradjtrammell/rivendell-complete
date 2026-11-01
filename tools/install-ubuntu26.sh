@@ -97,6 +97,15 @@ if [[ "$MODE" == build ]]; then
   exit 0
 fi
 
+# Validate the COMPLETE package transaction BEFORE creating users, databases
+# or configuration. A dependency failure must not leave a partial station.
+PLAN="$(sudo apt-get -s install "$PKG_WEB" "$PKG")" ||
+  fail 'APT cannot satisfy the locally built package dependencies'
+if grep -q '^Remv ' <<<"$PLAN"; then
+  printf '%s\n' "$PLAN" >&2
+  fail 'Refusing package removal during station initialization'
+fi
+
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mariadb-server
 sudo systemctl enable --now mariadb
 SCHEMA="$(sudo mariadb -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'")"
@@ -137,11 +146,6 @@ sudo ln -s /etc/rivendell.d/rd-default.conf /etc/rd.conf
 sudo install -o root -g root -m 0600 /dev/null /etc/rivendell.d/rdcomplete-first-install
 unset DB_SECRET SERVICE_SECRET
 sudo usermod -aG rivendell "$(id -un)"
-PLAN="$(sudo apt-get -s install "$PKG_WEB" "$PKG")" || fail 'Package transaction not satisfiable'
-if grep -q '^Remv ' <<<"$PLAN"; then
-  printf '%s\n' "$PLAN" >&2
-  fail 'Refusing transaction that would remove installed packages'
-fi
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$PKG_WEB" "$PKG"
 for exe in rdadmin rdairplay rdlibrary rdlogmanager rdimport rddbmgr; do
   command -v "$exe" >/dev/null || fail "Installed executable missing: $exe"
