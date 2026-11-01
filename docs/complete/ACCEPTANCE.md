@@ -4,7 +4,7 @@
 
 **First qualification hardware:** Ubuntu 26.04 Desktop x86_64; one station per PC; 8 GiB RAM, 128 GB boot SSD; the existing music remains in its original NAS share/directory, read-only, with **zero library copy or move**. One machine handles complete automated playout, scheduling, encoders and local/studio broadcast output where required.
 
-**Contract policy:** Every requirement below remains an obligation until it is independently verified. Code committed, source compiled, and package built are distinct evidence levels. A stage that passed a unit test is **not** production-ready. New requests, options, or corrections must be added here and reflected in the project README in the same branch. Preserve the upstream \`v4\` baseline; keep unqualified work in draft PRs.
+**Contract policy:** Every requirement below remains an obligation until it is independently verified. Code committed, source compiled, and package built are distinct evidence levels. A stage that passed a unit test is **not** production-ready. New requests, options, or corrections must be added here and reflected in the project README in the same branch. Preserve the upstream `v4` baseline; keep unqualified work in draft PRs.
 
 Legend: **PARTIAL** = component/code exists but feature not end-to-end qualified; **MISSING** = not delivered; **UNVERIFIED** = behavior not demonstrated; **BLOCKED** = unresolved build/install defect. No item is fully qualified at this time.
 
@@ -100,9 +100,9 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
 
 ### Actual workstation incidents (must be regression-tested)
 
-1. Fresh Ubuntu 26.04 installer originally stopped at **\`libid3-dev\`**. Correction: native **\`libid3-3.8.3-dev\`**, changed in installer and CI. Preflight lists **all** missing packages rather than failing at one. **No incompatible Ubuntu repositories**.
-2. Native build originally failed in the request-driven RDAirPlay C++ \`PX\` switch case. Scoping corrected; must rerun in native CI.
-3. After installing dependencies, the real workstation reached \`dpkg-buildpackage --build=binary --no-sign\` and failed at **\`debian/rules:15\`** because \`librivwebcapi.so.*\` had never been built. The \`debian/rules.src\` \`binary\` target now depends on \`build\`; *do not treat this as fixed until Debian package CI and the actual machine pass*.
+1. Fresh Ubuntu 26.04 installer originally stopped at **`libid3-dev`**. Correction: native **`libid3-3.8.3-dev`**, changed in installer and CI. Preflight lists **all** missing packages rather than failing at one. **No incompatible Ubuntu repositories**.
+2. Native build originally failed in the request-driven RDAirPlay C++ `PX` switch case. Scoping corrected; must rerun in native CI.
+3. After installing dependencies, the real workstation reached `dpkg-buildpackage --build=binary --no-sign` and failed at **`debian/rules:15`** because `librivwebcapi.so.*` had never been built. The `debian/rules.src` `binary` target now depends on `build`; *do not treat this as fixed until Debian package CI and the actual machine pass*.
 4. Avoid telling operators to rerun installation repeatedly on guesses. An updated build command is justified only when the exact failing revision has successful independent verification at the corresponding gate.
 
 ## Implementation references
