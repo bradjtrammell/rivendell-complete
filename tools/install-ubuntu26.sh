@@ -52,7 +52,7 @@ sudo apt-get update
 PACKAGES='build-essential autoconf automake autoconf-archive autotools-dev libtool
 pkgconf debhelper dh-autoreconf devscripts fakeroot dpkg-dev ca-certificates
 git python3 python3-pycurl python3-pymysql python3-mysqldb python3-serial
-python3-requests libexpat1-dev libid3-dev libcurl4-gnutls-dev libcoverart-dev
+python3-requests libexpat1-dev libid3-3.8.3-dev libcurl4-gnutls-dev libcoverart-dev
 libdiscid-dev libmusicbrainz5-dev libcdparanoia-dev libsndfile1-dev
 libpam0g-dev libvorbis-dev libsamplerate0-dev qtbase5-dev qttools5-dev-tools
 libqt5sql5-mysql qtwebengine5-dev libsoundtouch-dev libjack-jackd2-dev
@@ -61,10 +61,19 @@ libtwolame-dev libssl-dev libtag1-dev libmagick++-7.q16-dev
 libltdl-dev rsync apache2 rsyslog mariadb-client
 docbook5-xml libxml2-utils docbook-xsl-ns xsltproc fop icedax
 qttranslations5-l10n ffmpeg openssl'
+missing=()
 while IFS= read -r p; do
   [[ -z "$p" ]] && continue
-  [[ "$(apt-cache policy "$p" | awk '/Candidate:/ {print $2;exit}')" != '(none)' ]] || fail "Unavailable native 26.04 dependency: $p"
+  candidate="$(apt-cache policy "$p" | awk '/Candidate:/ {print $2;exit}')"
+  if [[ -z "$candidate" || "$candidate" == '(none)' ]]; then
+    missing+=("$p")
+  fi
 done < <(printf '%s\n' "$PACKAGES" | tr ' ' '\n')
+if (("${#missing[@]}" > 0)); then
+  printf '[RivendellComplete] Unavailable native Ubuntu 26.04 packages:\n' >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  fail 'Dependency preflight failed; no cross-release repositories will be used'
+fi
 # Intentional word splitting of a trusted literal package list.
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PACKAGES
 log 'Compiling patched QtWebEngine / ImageMagick 7 Rivendell'

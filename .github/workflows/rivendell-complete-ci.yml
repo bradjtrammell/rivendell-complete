@@ -51,7 +51,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get install -y --no-install-recommends \
             build-essential autoconf automake autoconf-archive autotools-dev libtool \
-            pkgconf libexpat1-dev libid3-dev libcurl4-gnutls-dev libcoverart-dev \
+            pkgconf libexpat1-dev libid3-3.8.3-dev libcurl4-gnutls-dev libcoverart-dev \
             libdiscid-dev libmusicbrainz5-dev libcdparanoia-dev libsndfile1-dev \
             libpam0g-dev libvorbis-dev libsamplerate0-dev qtbase5-dev \
             qttools5-dev-tools libqt5sql5-mysql qtwebengine5-dev \
