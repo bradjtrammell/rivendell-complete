@@ -1,0 +1,16 @@
+[Unit]
+Description=Rivendell Complete - resilient JACK audio routing
+After=rdcomplete-stream.service
+Wants=rdcomplete-stream.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/rdcomplete-jack-route --interval 5
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
