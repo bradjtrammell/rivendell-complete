@@ -1,0 +1,12 @@
+[Unit]
+Description=Rivendell Complete - generate future logs twice daily
+
+[Timer]
+OnCalendar=*-*-* 02,14:15:00
+Persistent=true
+RandomizedDelaySec=1min
+AccuracySec=1min
+Unit=rdcomplete-loggen.service
+
+[Install]
+WantedBy=timers.target
