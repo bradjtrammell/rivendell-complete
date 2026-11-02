@@ -1,143 +1,164 @@
 #!/usr/bin/env bash
-# Mount an existing NAS library read-only without renaming or copying audio.
-# Example: sudo ./tools/setup-nas.sh --nfs '192.0.2.10:/music'
-# Example: sudo ./tools/setup-nas.sh --smb '//192.0.2.10/music'
+# Rivendell Complete: mount original NFS/SMB media read-only.
+# This script never imports, copies, renames, writes to, or deletes NAS audio.
 set -Eeuo pipefail
 umask 077
 
-die(){ printf 'ERROR: %s\n' "$*" >&2; exit 1; }
-usage(){
+die() { printf 'Rivendell Complete NAS: %s\n' "$*" >&2; exit 1; }
+usage() {
   cat <<'HELP'
 Usage:
-  sudo ./tools/setup-nas.sh --nfs HOST:/EXPORT [--mountpoint /mnt/radio-music]
-  sudo ./tools/setup-nas.sh --smb //HOST/SHARE [--mountpoint /mnt/radio-music]
-Existing NAS audio is read-only. No copying or changing filenames.
-SMB asks for credentials interactively; no password in command arguments.
+  sudo bash tools/setup-nas.sh --nfs HOST:/absolute/export [--mountpoint /mnt/radio-music]
+  sudo bash tools/setup-nas.sh --smb //HOST/SHARE [--mountpoint /mnt/radio-music]
+
+Requirements: fresh Ubuntu 26.04, unused mountpoint, no conflicting /etc/fstab entry.
+The media share is mounted read-only. SMB credentials are prompted privately,
+stored mode 0600 under /etc/rivendell-complete, and never put on the command line.
 HELP
 }
-[[ "$EUID" -eq 0 ]] || die 'Run with sudo'
+if [[ "$#" -eq 1 && ( "$1" == -h || "$1" == --help ) ]]; then usage; exit 0; fi
+[[ "$EUID" -eq 0 ]] || die 'Run with sudo (requires root to configure mounts)'
+[[ -r /etc/os-release ]] || die 'Missing /etc/os-release'
 source /etc/os-release
-[[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || die 'Ubuntu 26.04 is required'
-proto=; src=; mp=/mnt/radio-music
+[[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || die 'Ubuntu 26.04 required'
+
+proto= src= mp=/mnt/radio-music
 while (($#)); do
   case "$1" in
     --nfs|--smb)
       [[ -z "$proto" && "$#" -ge 2 ]] || die 'Specify exactly one NAS protocol and share'
-      proto="$1";src="$2";shift 2;;
+      proto="$1"; src="$2"; shift 2 ;;
     --mountpoint)
-      [[ "$#" -ge 2 ]] || die 'Missing mountpoint'
-      mp="$2";shift 2;;
-    --help|-h) usage;exit 0;;
-    *) die "Unknown option $1";;
+      [[ "$#" -ge 2 ]] || die 'Missing mountpoint value'
+      mp="$2"; shift 2 ;;
+    *) die "Unknown argument: $1" ;;
   esac
 done
-[[ -n "$proto" && -n "$src" ]] || { usage; exit 2; }
-[[ "$mp" =~ ^/mnt/[A-Za-z0-9_-]+$ ]] || die 'Mountpoint must be a simple direct /mnt/<name> path'
-[[ "$src" != *' '* && "$src" != *
+[[ -n "$proto" && -n "$src" ]] || { usage >&2; exit 2; }
+[[ "$mp" =~ ^/mnt/[A-Za-z0-9_-]+$ ]] || die 'Mountpoint must be a direct /mnt/name path'
+# /etc/fstab fields are unescaped: refuse whitespace, comments, commas, and backslashes.
+[[ "$src" != *[[:space:]]* && "$src" != *'#'* && "$src" != *','* && "$src" != *'\'* ]] ||
+  die 'Share contains a character unsafe for /etc/fstab'
 if [[ "$proto" == --nfs ]]; then
-  [[ "$src" =~ ^[A-Za-z0-9_.-]+:/[^[:space:],]+$ ]] || die 'NFS must be HOST:/absolute/export'
+  [[ "$src" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*:/[A-Za-z0-9_./-]+$ ]] ||
+    die 'NFS source must be HOST:/absolute/export'
+  fstype=nfs
 else
-  [[ "$src" =~ ^//[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+$ ]] || die 'SMB must be //HOST/SHARE'
+  [[ "$src" =~ ^//[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_./-]+$ ]] ||
+    die 'SMB source must be //HOST/SHARE'
+  fstype=cifs
 fi
+
+# Prevent two invocations from changing fstab concurrently.
+exec 9>/run/lock/rivendell-complete-nas.lock
+flock -n 9 || die 'Another NAS configuration is running'
 if [[ -e "$mp" ]]; then
   [[ -d "$mp" && ! -L "$mp" ]] || die 'Mountpoint is not a normal directory'
-  [[ -z "$(find "$mp" -mindepth 1 -maxdepth 1 -print -quit)" ]] || die 'Mountpoint not empty, refusing to obscure existing files'
-  ! mountpoint -q "$mp" || die 'Mountpoint is already mounted'
+  mountpoint -q "$mp" && die 'Mountpoint is already mounted'
+  [[ -z "$(find "$mp" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+    die 'Mountpoint is not empty; refusing to hide files'
 fi
-[[ -z "$(grep -F " $mp " /etc/fstab || true)" ]] || die 'Mountpoint already configured in /etc/fstab'
-[[ -z "$(grep -F "$src " /etc/fstab || true)" ]] || die 'Share already configured in /etc/fstab'
+[[ -f /etc/fstab && ! -L /etc/fstab ]] || die 'Invalid /etc/fstab'
+if awk -v source="$src" -v target="$mp" '
+  $1 !~ /^#/ && ($1 == source || $2 == target) { collision=1 }
+  END { exit !collision }
+' /etc/fstab; then
+  die 'Share or mountpoint already configured in /etc/fstab'
+fi
+
 if [[ "$proto" == --nfs ]]; then
-  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nfs-common
-  fstype=nfs
   options='ro,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s,hard,timeo=50,retrans=3'
 else
-  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cifs-utils
   read -r -p 'NAS SMB username: ' username
-  [[ -n "$username" && "$username" != *$'\n'* && "$username" != *'='* ]] || die 'Invalid username'
+  [[ -n "$username" && "$username" != *[[:cntrl:]]* && "$username" != *'='* && "$username" != *'\'* ]] ||
+    die 'Invalid SMB username'
   read -r -s -p 'NAS SMB password: ' password; printf '\n'
-  [[ -n "$password" && "$password" != *$'\n'* ]] || die 'Invalid password'
-  install -d -m 0700 /etc/rivendell-complete
-  [[ ! -e /etc/rivendell-complete/nas.cred ]] || die 'NAS credential file already exists'
-  cred_tmp="$(mktemp /etc/rivendell-complete/.cred.XXXXXX)"
-  trap 'rm -f "$cred_tmp"' EXIT
-  # The credentials file is root-only. Passwords are never written into fstab.
-  printf 'username=%s\npassword=%s\n' "$username" "$password" > "$cred_tmp"
-  chmod 0600 "$cred_tmp"
-  mv -n "$cred_tmp" /etc/rivendell-complete/nas.cred
-  unset password
-  fstype=cifs
+  [[ -n "$password" && "$password" != *$'\n'* && "$password" != *$'\r'* ]] ||
+    die 'Invalid SMB password'
   options='ro,credentials=/etc/rivendell-complete/nas.cred,vers=3.1.1,iocharset=utf8,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s'
 fi
-mkdir -p "$mp"
-backup="/etc/fstab.rivendell-complete.$(date +%Y%m%d%H%M%S)"
-cp -p /etc/fstab "$backup"
-printf '\n# Rivendell Complete: original NAS music, READ-ONLY\n%s %s %s %s 0 0\n' \
-  "$src" "$mp" "$fstype" "$options" >> /etc/fstab
-systemctl daemon-reload
-if ! mount "$mp"; then
-  # Safe failure: no mutation of original NAS; preserve backup for inspection.
-  echo "NAS mounting failed. Reverting our /etc/fstab entry." >&2
-  cp "$backup" /etc/fstab
-  systemctl daemon-reload
-  exit 1
+
+# Do not overwrite an existing credential file.
+if [[ "$proto" == --smb ]]; then
+  install -d -o root -g root -m 0700 /etc/rivendell-complete
+  [[ ! -e /etc/rivendell-complete/nas.cred && ! -L /etc/rivendell-complete/nas.cred ]] ||
+    die 'SMB credential file already exists; refusing overwrite'
 fi
-mount_opts="$(findmnt -rn -o OPTIONS --target "$mp" || true)"
-[[ ",$mount_opts," == *,ro,* ]] || die 'NAS did not mount read-only; unmount and inspect immediately'
-printf 'NAS source: %s\nMounted read-only at: %s\n' "$src" "$mp"
-echo 'Original music untouched. Configure [ExternalAudio] Root to this mountpoint.'
-\t'* && "$src" != *','* && "$src" != *'\'* ]] || die 'Share path contains invalid characters'
-if [[ "$proto" == --nfs ]]; then
-  [[ "$src" =~ ^[A-Za-z0-9_.-]+:/[^[:space:],]+$ ]] || die 'NFS must be HOST:/absolute/export'
-else
-  [[ "$src" =~ ^//[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+$ ]] || die 'SMB must be //HOST/SHARE'
-fi
-if [[ -e "$mp" ]]; then
-  [[ -d "$mp" && ! -L "$mp" ]] || die 'Mountpoint is not a normal directory'
-  [[ -z "$(find "$mp" -mindepth 1 -maxdepth 1 -print -quit)" ]] || die 'Mountpoint not empty, refusing to obscure existing files'
-  ! mountpoint -q "$mp" || die 'Mountpoint is already mounted'
-fi
-[[ -z "$(grep -F " $mp " /etc/fstab || true)" ]] || die 'Mountpoint already configured in /etc/fstab'
-[[ -z "$(grep -F "$src " /etc/fstab || true)" ]] || die 'Share already configured in /etc/fstab'
-if [[ "$proto" == --nfs ]]; then
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nfs-common
-  fstype=nfs
-  options='ro,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s,hard,timeo=50,retrans=3'
-else
-  apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cifs-utils
-  read -r -p 'NAS SMB username: ' username
-  [[ -n "$username" && "$username" != *$'\n'* && "$username" != *'='* ]] || die 'Invalid username'
-  read -r -s -p 'NAS SMB password: ' password; printf '\n'
-  [[ -n "$password" && "$password" != *$'\n'* ]] || die 'Invalid password'
-  install -d -m 0700 /etc/rivendell-complete
-  [[ ! -e /etc/rivendell-complete/nas.cred ]] || die 'NAS credential file already exists'
-  cred_tmp="$(mktemp /etc/rivendell-complete/.cred.XXXXXX)"
-  trap 'rm -f "$cred_tmp"' EXIT
-  # The credentials file is root-only. Passwords are never written into fstab.
-  printf 'username=%s\npassword=%s\n' "$username" "$password" > "$cred_tmp"
-  chmod 0600 "$cred_tmp"
-  mv -n "$cred_tmp" /etc/rivendell-complete/nas.cred
+backup=
+temp=
+credential_created=0
+fstab_changed=0
+written_sha=
+on_error() {
+  local rc=$?
+  trap - ERR
+  if [[ "$fstab_changed" -eq 1 && -n "$backup" && -n "$written_sha" &&
+        "$(sha256sum /etc/fstab | cut -d' ' -f1)" == "$written_sha" ]]; then
+    umount "$mp" >/dev/null 2>&1 || true
+    cp -p "$backup" /etc/fstab || true
+    systemctl daemon-reload || true
+  fi
+  if [[ "$credential_created" -eq 1 ]]; then
+    rm -f /etc/rivendell-complete/nas.cred
+  fi
+  printf 'Rivendell Complete NAS: mount/configuration failed (status %s); check connectivity and source permissions\n' "$rc" >&2
+  exit "$rc"
+}
+trap on_error ERR
+trap 'if [[ -n "$temp" ]]; then rm -f "$temp"; fi' EXIT
+if [[ "$proto" == --smb ]]; then
+  credential_temp="$(mktemp /etc/rivendell-complete/.nas.XXXXXX)"
+  chmod 0600 "$credential_temp"
+  printf 'username=%s\npassword=%s\n' "$username" "$password" > "$credential_temp"
   unset password
-  fstype=cifs
-  options='ro,credentials=/etc/rivendell-complete/nas.cred,vers=3.1.1,iocharset=utf8,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s'
+  mv -n "$credential_temp" /etc/rivendell-complete/nas.cred
+  [[ -f /etc/rivendell-complete/nas.cred ]] || die 'Could not install credential file'
+  credential_created=1
 fi
-mkdir -p "$mp"
-backup="/etc/fstab.rivendell-complete.$(date +%Y%m%d%H%M%S)"
+
+# Atomic fstab replacement and a timestamped, root-only recovery copy.
+backup="/etc/fstab.rivendell-complete.$(date -u +%Y%m%dT%H%M%SZ).$$"
 cp -p /etc/fstab "$backup"
-printf '\n# Rivendell Complete: original NAS music, READ-ONLY\n%s %s %s %s 0 0\n' \
-  "$src" "$mp" "$fstype" "$options" >> /etc/fstab
+chmod 0600 "$backup"
+temp="$(mktemp /etc/.fstab.rivendell-complete.XXXXXX)"
+cp -p /etc/fstab "$temp"
+printf '\n# Rivendell Complete original audio: READ ONLY\n%s %s %s %s 0 0\n' \
+  "$src" "$mp" "$fstype" "$options" >> "$temp"
+chmod 0644 "$temp"
+mkdir -p "$mp"
+mv -f "$temp" /etc/fstab
+temp=
+fstab_changed=1
+written_sha="$(sha256sum /etc/fstab | cut -d' ' -f1)"
 systemctl daemon-reload
-if ! mount "$mp"; then
-  # Safe failure: no mutation of original NAS; preserve backup for inspection.
-  echo "NAS mounting failed. Reverting our /etc/fstab entry." >&2
-  cp "$backup" /etc/fstab
-  systemctl daemon-reload
-  exit 1
+mount "$mp"
+# This also triggers systemd automount on systems using that mechanism.
+stat "$mp/." >/dev/null
+actual_type="$(findmnt -rn -T "$mp" -o FSTYPE)"
+actual_options="$(findmnt -rn -T "$mp" -o OPTIONS)"
+if [[ "$proto" == --nfs ]]; then
+  if [[ "$actual_type" != nfs && "$actual_type" != nfs4 ]]; then
+    printf "Expected NFS mount; found %s\n" "$actual_type" >&2
+    false
+  fi
+else
+  if [[ "$actual_type" != cifs ]]; then
+    printf "Expected CIFS mount; found %s\n" "$actual_type" >&2
+    false
+  fi
 fi
-mount_opts="$(findmnt -rn -o OPTIONS --target "$mp" || true)"
-[[ ",$mount_opts," == *,ro,* ]] || die 'NAS did not mount read-only; unmount and inspect immediately'
-printf 'NAS source: %s\nMounted read-only at: %s\n' "$src" "$mp"
-echo 'Original music untouched. Configure [ExternalAudio] Root to this mountpoint.'
+if [[ ",$actual_options," != *,ro,* ]]; then
+  printf "Mount is NOT read-only; refusing success\n" >&2
+  false
+fi
+
+credential_created=0
+fstab_changed=0
+trap - ERR
+printf 'NAS mounted and verified read-only: %s -> %s (%s)\n' "$src" "$mp" "$actual_type"
+printf 'Recovery copy of original fstab: %s\n' "$backup"
+printf 'Set [ExternalAudio] Root=%s in the local Rivendell configuration.\n' "$mp"

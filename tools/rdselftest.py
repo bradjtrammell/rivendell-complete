@@ -81,10 +81,13 @@ class Check:
                 f=os.statvfs(root)
                 readonly=bool(f.f_flag & os.ST_RDONLY)
                 self.add("nas-readonly",readonly,str(root))
-                mount=self.command("findmnt",["-rn","-o","SOURCE,FSTYPE,OPTIONS","-T",str(root)])
+                mount=self.command("findmnt",["-rn","-M",str(root),"-o","SOURCE,FSTYPE,OPTIONS"])
                 detail=mount.stdout.strip() if mount and mount.returncode==0 else "mount missing"
-                self.add("nas-mounted",bool(mount and mount.returncode==0
-                                            and root!=Path("/")),detail)
+                fields=detail.split(None,2)
+                verified=(root!=Path("/") and len(fields)==3
+                          and fields[1] in ("nfs","nfs4","cifs")
+                          and "ro" in fields[2].split(","))
+                self.add("nas-mounted",bool(mount and mount.returncode==0 and verified),detail)
                 first=next((str(x.relative_to(root)) for x in root.rglob("*")
                             if x.is_file() and x.suffix.lower() in (".mp3",".wav",".ogg",".flac")),None)
                 self.add("nas-audio-readable",bool(first),first or "no audio found")

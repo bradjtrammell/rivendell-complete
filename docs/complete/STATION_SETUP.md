@@ -16,7 +16,7 @@ As the normal desktop login user:
 ```bash
 sudo apt-get update
 sudo apt-get install -y git
-git clone --branch feat/ubuntu26-external-nas-media \
+git clone --branch dev \
   https://github.com/bradjtrammell/rivendell-complete.git
 cd rivendell-complete
 bash tools/install-ubuntu26.sh --build-only

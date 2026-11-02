@@ -6,6 +6,8 @@ Rivendell Complete extends [Rivendell 4](https://github.com/ElvishArtisan/rivend
 
 **Internet-only stations do not need an FM transmitter or broadcast sound card.** Terrestrial stations can use the same platform for a local studio/transmitter feed and simultaneous internet streaming.
 
+> **Branch policy:** `master` preserves the original Rivendell 4 source. `dev` is Rivendell Complete 5.0 development. All product engineering happens on `dev`.
+
 > **Release status:** Active development. Some components exist and pass automated tests; a complete Ubuntu 26.04 installation and an uninterrupted on-air station have **not** been verified. This repository is not yet a production release. The [acceptance ledger](docs/complete/ACCEPTANCE.md) tracks every requirement, including unfinished work.
 
 ## One system for the entire station
@@ -77,7 +79,7 @@ These specifications are an initial supported target, **not** a restriction that
 ```bash
 sudo apt-get update
 sudo apt-get install -y git
-git clone --branch feat/ubuntu26-external-nas-media \
+git clone --branch dev \
   https://github.com/bradjtrammell/rivendell-complete.git
 cd rivendell-complete
 bash tools/install-ubuntu26.sh --build-only
