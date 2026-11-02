@@ -42,6 +42,17 @@ class ProvisioningTests(unittest.TestCase):
             self.assertIn(marker, s)
         self.assertNotIn("git clean -", s)
         self.assertNotIn("git reset --hard", s)
+        self.assertIn("tmux kill-session", s)
+        self.assertIn("--install-existing --streaming --jobs 2", s)
+
+    def test_package_resume_and_reauth(self):
+        installer = (ROOT / "tools" / "install-ubuntu26.sh").read_text()
+        deployer = (ROOT / "tools" / "deploy-test-system.sh").read_text()
+        systemd = (ROOT / "systemd" / "Makefile.am").read_text()
+        for marker in ("--install-existing", "REUSE_PACKAGES=1", "sudo -v || fail", "sudo -n apt-get -s install"):
+            self.assertIn(marker, installer)
+        self.assertIn("--install-existing", deployer)
+        self.assertIn('test -z "$(DESTDIR)"', systemd)
 
     def test_safe_deployer_default(self):
         s = (ROOT / "tools/deploy-test-system.sh").read_text()

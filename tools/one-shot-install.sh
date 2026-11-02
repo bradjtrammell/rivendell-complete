@@ -46,9 +46,13 @@ if (( $# == 0 )); then
   fi
   SESSION=rivendell-install
   if tmux has-session -t "$SESSION" 2>/dev/null; then
-    say "Attaching to existing session $SESSION"
-    tmux attach-session -t "$SESSION"
-    exit $?
+    if tmux list-panes -t "$SESSION" -F '#{pane_dead}' | grep -qx 0; then
+      say "Rejoining active installation session $SESSION"
+      tmux attach-session -t "$SESSION"
+      exit $?
+    fi
+    say "Previous pane has exited; log preserved. Starting new installation session."
+    tmux kill-session -t "$SESSION"
   fi
   tmux new-session -d -s "$SESSION" -n installation
   tmux set-window-option -t "$SESSION:0" remain-on-exit on
@@ -103,8 +107,13 @@ if dpkg-query -W -f='${Status}' rivendell 2>/dev/null | grep -qx 'install ok ins
   fail 'Rivendell already installed. Refusing to overwrite.'
 fi
 
-say 'Installing native Rivendell packages, MariaDB and streaming tools'
-bash tools/deploy-test-system.sh --install --streaming --jobs 2
+if [[ -f "$ROOT/../rivendell_4.5.0-1_amd64.deb" && -f "$ROOT/../rivendell-webapi_4.5.0-1_amd64.deb" ]]; then
+  say 'Compiled .deb files found; continuing installation without recompiling.'
+  bash tools/deploy-test-system.sh --install-existing --streaming --jobs 2
+else
+  say 'Building native Rivendell packages, then installing.'
+  bash tools/deploy-test-system.sh --install --streaming --jobs 2
+fi
 
 say 'Verifying native packages and programs'
 dpkg-query -W rivendell rivendell-webapi

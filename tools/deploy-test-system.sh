@@ -12,6 +12,7 @@ Usage: bash tools/deploy-test-system.sh [--check-only|--build-only|--install]
 
 Default --check-only: static checks and Python regression suite; no system changes.
 --build-only: checks plus native Ubuntu 26.04 package build; no installation.
+--install-existing: install validated existing .deb archives without compilation.
 --install: checks, build, guarded fresh installation and optional components.
 --nfs / --smb mounts an existing NAS source strictly read-only (never copies files).
 --streaming installs encoder tools but DOES NOT start or configure an outgoing feed.
@@ -31,6 +32,7 @@ while (($#)); do
     --check-only) mode=check; shift ;;
     --build-only) mode=build; shift ;;
     --install) mode=install; shift ;;
+    --install-existing) mode=install_existing; shift ;;
     --jobs)
       (($# >= 2)) || fail 'Missing --jobs argument'
       jobs="$2"; shift 2 ;;
@@ -51,7 +53,7 @@ done
 [[ "$EUID" -ne 0 ]] || fail 'Run as desktop user, not root'
 [[ -z "$group" || "$group" =~ ^[A-Za-z0-9_][A-Za-z0-9_-]{0,9}$ ]] ||
   fail 'Invalid request group'
-if [[ "$mode" != install ]]; then
+if [[ "$mode" != install && "$mode" != install_existing ]]; then
   [[ -z "$source_type" && -z "$group" && "$streaming" -eq 0 ]] ||
     fail 'NAS, streaming and request installation require --install'
 fi
@@ -78,7 +80,11 @@ if [[ "$mode" == build ]]; then
   exit 0
 fi
 log 'Installing guarded fresh workstation baseline'
-bash tools/install-ubuntu26.sh --install --jobs "$jobs"
+if [[ "$mode" == install_existing ]]; then
+  bash tools/install-ubuntu26.sh --install-existing --jobs "$jobs"
+else
+  bash tools/install-ubuntu26.sh --install --jobs "$jobs"
+fi
 if [[ -n "$source_type" ]]; then
   log 'Mounting original NAS share read-only'
   sudo bash tools/setup-nas.sh "$source_type" "$source_path"

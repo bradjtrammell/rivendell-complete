@@ -83,6 +83,9 @@ paste this one command:
 cd ~/rivendell-complete && git fetch origin dev && git switch dev && git merge --ff-only origin/dev && bash tools/one-shot-install.sh
 ```
 
+If sudo expires after native compilation, rerun the command to reuse the
+already compiled packages and resume installation without rebuilding them.
+
 The installer uses a persistent tmux session, prompts for sudo inside that
 terminal, builds and installs native Ubuntu 26 packages, configures local
 MariaDB and installs (but does not activate) the streaming encoder.

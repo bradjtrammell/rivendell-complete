@@ -4,14 +4,16 @@ set -Eeuo pipefail
 umask 027
 
 MODE=build
+REUSE_PACKAGES=0
 JOBS=2
 fail() { printf '[RivendellComplete] ERROR: %s\n' "$*" >&2; exit 1; }
 log() { printf '[RivendellComplete] %s\n' "$*"; }
 usage() {
   cat <<'HELP'
-Usage: ./tools/install-ubuntu26.sh [--build-only|--install] [--jobs 1..4]
+Usage: ./tools/install-ubuntu26.sh [--build-only|--install|--install-existing] [--jobs 1..4]
  --build-only  Build native Ubuntu 26.04 .deb package (default)
- --install     Install on a FRESH standalone Ubuntu Desktop computer.
+ --install     Build and install on a FRESH Ubuntu Desktop computer.
+ --install-existing  Reuse validated local .deb packages; skip compilation.
                Never uses an existing NAS music share as cart storage.
 HELP
 }
@@ -19,6 +21,7 @@ while (($#)); do
   case "$1" in
     --build-only) MODE=build; shift ;;
     --install) MODE=install; shift ;;
+    --install-existing) MODE=install; REUSE_PACKAGES=1; shift ;;
     --jobs) (($# > 1)) || fail 'Missing jobs'; JOBS="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) fail "Unknown argument: $1" ;;
@@ -39,9 +42,10 @@ if [[ "$MODE" == install ]]; then
   if mountpoint -q /var/snd; then fail '/var/snd is mounted; never point it at an existing music library'; fi
   [[ ! -e /var/snd || -z "$(find /var/snd -mindepth 1 -maxdepth 1 -print -quit)" ]] || fail '/var/snd already has data'
 fi
-FREE_KB="$(df -Pk "$ROOT" | awk 'END {print $4}')"
-((FREE_KB >= 10*1024*1024)) || fail '10 GiB free build space required'
-sudo -v
+if (( REUSE_PACKAGES == 0 )); then
+  FREE_KB="$(df -Pk "$ROOT" | awk 'END {print $4}')"
+  ((FREE_KB >= 10*1024*1024)) || fail '10 GiB free build space required'
+  sudo -v
 log 'Enabling native Ubuntu 26.04 Universe (NO mixed Ubuntu repositories)'
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends software-properties-common
@@ -76,32 +80,42 @@ if (("${#missing[@]}" > 0)); then
 fi
 # Intentional word splitting of a trusted literal package list.
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PACKAGES
-log 'Compiling patched QtWebEngine / ImageMagick 7 Rivendell'
-cd "$ROOT"
-./autogen.sh
-export DEB_BUILD_OPTIONS="parallel=$JOBS"
-export DEBUILD_MAKE_ARGS="-j$JOBS"
-dpkg-buildpackage --build=binary --no-sign
+  log 'Compiling patched QtWebEngine / ImageMagick 7 Rivendell'
+  cd "$ROOT"
+  ./autogen.sh
+  export DEB_BUILD_OPTIONS="parallel=$JOBS"
+  export DEBUILD_MAKE_ARGS="-j$JOBS"
+  dpkg-buildpackage --build=binary --no-sign
+else
+  log 'Existing packages detected: skipping native build'
+fi
 PKG="$ROOT/../rivendell_4.5.0-1_amd64.deb"
 PKG_WEB="$ROOT/../rivendell-webapi_4.5.0-1_amd64.deb"
 [[ -f "$PKG" ]] || fail "Missing Rivendell main .deb: $PKG"
 [[ -f "$PKG_WEB" ]] || fail "Missing required web API runtime .deb: $PKG_WEB"
 for package in "$PKG" "$PKG_WEB"; do
+  dpkg-deb --info "$package" >/dev/null || fail "Invalid package archive: $package"
+  dpkg-deb --contents "$package" >/dev/null || fail "Unreadable package archive: $package"
   dpkg-deb -f "$package" Package Version Architecture
   [[ "$(dpkg-deb -f "$package" Architecture)" == amd64 ]] || fail "Wrong architecture: $package"
   [[ "$(dpkg-deb -f "$package" Version)" == 4.5.0-1 ]] || fail "Wrong version: $package"
 done
 dpkg-deb --contents "$PKG" | grep '/usr/bin/rdairplay$' >/dev/null ||
   fail 'Main package is missing RDAirPlay'
+[[ "$(dpkg-deb -f "$PKG" Package)" == rivendell ]] || fail 'Wrong main package name'
+[[ "$(dpkg-deb -f "$PKG_WEB" Package)" == rivendell-webapi ]] || fail 'Wrong webapi package name'
 if [[ "$MODE" == build ]]; then
   log "Built $PKG. No Rivendell database/application installed."
   exit 0
 fi
 
+log 'Reauthenticating sudo before package installation; long builds expire sudo timestamps'
+sudo -v || fail 'sudo authentication failed; compiled .deb files remain intact'
+
 # Validate the COMPLETE package transaction BEFORE creating users, databases
 # or configuration. A dependency failure must not leave a partial station.
-PLAN="$(sudo apt-get -s install "$PKG_WEB" "$PKG")" ||
-  fail 'APT cannot satisfy the locally built package dependencies'
+PLAN="$(sudo -n apt-get -s install "$PKG_WEB" "$PKG")" ||
+  fail 'APT dependency simulation failed after authentication; inspect the APT error above'
 if grep -q '^Remv ' <<<"$PLAN"; then
   printf '%s\n' "$PLAN" >&2
   fail 'Refusing package removal during station initialization'

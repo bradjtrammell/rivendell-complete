@@ -21,7 +21,7 @@
 install-exec-local:	
 	mkdir -p $(DESTDIR)/lib/systemd/system
 	cp rivendell.service $(DESTDIR)/lib/systemd/system/rivendell.service
-	./daemon-reload.sh
+	@if test -z "$(DESTDIR)"; then ./daemon-reload.sh; fi
 
 uninstall-local:	
 	rm -f $(DESTDIR)/lib/systemd/system/rivendell.service
