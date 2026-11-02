@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
+import subprocess
 
 f=Path(__file__).resolve().parents[1]/"tools"/"rdselftest.py"
 spec=importlib.util.spec_from_file_location("rdselftest_tested",f)
@@ -22,6 +24,23 @@ class DiagnosticTests(unittest.TestCase):
         self.assertEqual(c.exit_status(True),2)
         c.add("critical",False,"invalid",critical=True)
         self.assertEqual(c.exit_status(True),1)
+    def test_local_filesystem_is_not_a_nas_mount(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/"music"
+            root.mkdir()
+            (root/"track.mp3").write_bytes(b"test")
+            config=Path(temp)/"rd.conf"
+            config.write_text("[ExternalAudio]\nRoot="+str(root)+"\n")
+            c=module.Check()
+            def fake_command(program,arguments,timeout=8):
+                if program=="findmnt":
+                    return subprocess.CompletedProcess([],0,"/dev/sda1 ext4 rw,relatime\n","")
+                return None
+            with mock.patch.object(c,"command",side_effect=fake_command):
+                c.evaluate(config)
+            results={x["name"]:x for x in c.results}
+            self.assertEqual(results["nas-mounted"]["status"],"fail")
+
     def test_missing_config_is_hard_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             c=module.Check()

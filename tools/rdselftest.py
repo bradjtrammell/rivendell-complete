@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import time
 import subprocess
 import sys
 import urllib.error
@@ -88,8 +89,21 @@ class Check:
                           and fields[1] in ("nfs","nfs4","cifs")
                           and "ro" in fields[2].split(","))
                 self.add("nas-mounted",bool(mount and mount.returncode==0 and verified),detail)
-                first=next((str(x.relative_to(root)) for x in root.rglob("*")
-                            if x.is_file() and x.suffix.lower() in (".mp3",".wav",".ogg",".flac")),None)
+                first=None
+                checked=0
+                deadline=time.monotonic()+5.0
+                # Bound network filesystem traversal on very large/offline shares.
+                for directory, subdirs, filenames in os.walk(root, followlinks=False):
+                    subdirs[:]=[n for n in subdirs if not (Path(directory)/n).is_symlink()]
+                    for filename in filenames:
+                        checked+=1
+                        if filename.lower().endswith((".mp3",".wav",".ogg",".flac")):
+                            first=str((Path(directory)/filename).relative_to(root))
+                            break
+                        if checked>=10000 or time.monotonic()>=deadline:
+                            break
+                    if first or checked>=10000 or time.monotonic()>=deadline:
+                        break
                 self.add("nas-audio-readable",bool(first),first or "no audio found")
             except (OSError,StopIteration) as exc:
                 self.add("nas-readonly",False,str(exc))
