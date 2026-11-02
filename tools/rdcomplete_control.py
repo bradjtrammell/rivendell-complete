@@ -261,7 +261,8 @@ class Console(QMainWindow):
         row.addWidget(self.register(push("Approve selected", lambda: self.moderate("approve"), True)))
         row.addWidget(self.register(push("Reject selected", lambda: self.moderate("reject"), True)))
         page.layout_.addLayout(row)
-        page.add(note("The listener endpoint is bound to 127.0.0.1:8787. No public website or remote network port is enabled here. Public requests require a separately secured front end; insertion into on-air logs is not yet qualified."))
+        page.add(self.register(push("Open listener request page", self.open_listener, True)))
+        page.add(note("Listener site: http://127.0.0.1:8787/requests (only on this machine). The station accepts submissions for moderation; external access requires a correctly secured TLS reverse proxy and client-specific rate limiting. Live insertion remains unqualified."))
         page.finish()
         self.pages.addWidget(page)
 
@@ -558,6 +559,12 @@ class Console(QMainWindow):
             return
         self.execute(["systemctl", "--user", "enable", "--now",
                       "rdcomplete-requests.service"], "request-start")
+
+    def open_listener(self):
+        from PyQt5.QtCore import QUrl
+        from PyQt5.QtGui import QDesktopServices
+        if not QDesktopServices.openUrl(QUrl("http://127.0.0.1:8787/requests")):
+            self._alert("Could not open the local listener request page.")
 
     def load_requests(self):
         database = STATE / "requests.sqlite"

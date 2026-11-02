@@ -35,7 +35,7 @@ unit="$units/rdcomplete-requests.service"
   printf '%s\n' '[Service]' 'Type=simple'
   printf 'ExecStart=%%h/.local/bin/rdcomplete-requests --database %%h/.local/state/rivendell-complete/requests.sqlite --catalog %%h/.local/state/rivendell-complete/request-catalog.json --listener-token-file %%h/.config/rivendell-complete/request-listener.token --admin-token-file %%h/.config/rivendell-complete/request-admin.token --listen 127.0.0.1 --port 8787'
   for arg in "${groups[@]}"; do printf ' %s' "$arg"; done
-  printf '\n'
+  printf '%s\n' ' --public-portal --moderated'
   printf '%s\n' 'Restart=on-failure' 'RestartSec=3' 'UMask=0077' 'NoNewPrivileges=true' 'PrivateTmp=true' 'ProtectSystem=strict' 'ProtectHome=read-only' 'ReadWritePaths=%h/.local/state/rivendell-complete' 'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' 'CapabilityBoundingSet='
   printf '%s\n' '[Install]' 'WantedBy=default.target'
 } > "$unit"

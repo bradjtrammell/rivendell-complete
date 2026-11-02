@@ -157,7 +157,7 @@ scripts are installed root-owned, not executed from the user-writable checkout.
 
 This is an integration pass, **not proof of on-air qualification**.
 FLAC external playout, waveform editing for NAS originals, live backtiming,
-a public listener request portal, emergency silence failover, and production
+a WAN-qualified listener request portal, emergency silence failover, and production
 rollback are still incomplete.
 
 ### Developer build (not a station installation)

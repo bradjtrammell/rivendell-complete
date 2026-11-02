@@ -27,6 +27,90 @@ MAX_REQUESTS_PER_HOUR = 4
 MIN_REPEAT_SECONDS = 3 * 3600
 
 
+
+# Public-facing listener experience. These assets have no embedded credentials.
+# They are served only by the explicitly enabled loopback-bound portal.
+PUBLIC_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><title>Request a song · Production Radio</title>
+<link rel="stylesheet" href="/requests/style.css"></head>
+<body><div class="site"><header><div class="mast">PRODUCTION <span>RADIO</span></div>
+<p>YOUR MUSIC, YOUR REQUEST</p></header>
+<main><section class="intro"><h1>What should we play next?</h1>
+<p>Search the station library and submit a request. A producer reviews each request before scheduling it.</p>
+</section><section class="search"><label for="search">Find a song or artist</label>
+<input id="search" type="search" autocomplete="off" placeholder="Type to search the music library" maxlength="120">
+<p class="feedback" id="feedback" role="status" aria-live="polite">Loading available music…</p>
+<ul id="songs" aria-label="Available songs"></ul></section>
+<section class="request" id="form-panel" hidden><h2 id="selected-title">Selected song</h2>
+<form id="request-form"><label for="name">Your name</label>
+<input id="name" name="name" minlength="1" maxlength="64" required autocomplete="name">
+<button type="submit" id="send">Send song request</button></form>
+<p class="feedback" role="status" aria-live="polite" id="result"></p></section></main>
+<footer>Requests are reviewed and are not guaranteed to air. No account required.</footer></div>
+<script src="/requests/app.js" defer></script></body></html>"""
+PUBLIC_CSS = """*{box-sizing:border-box}body{margin:0;background:#f7f3e8;color:#262721;font:16px/1.55 system-ui,Arial,sans-serif}
+.site{max-width:1030px;margin:auto;padding:0 22px}header{background:#252c26;color:white;margin:0 -22px;padding:24px 22px 17px;
+display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+.mast{font-weight:900;font-size:27px;letter-spacing:-1px}.mast span{color:#ffb97d}
+header p{font-size:12px;letter-spacing:.1em;color:#f4d8b9}main{display:grid;grid-template-columns:3fr 2fr;gap:36px;padding:52px 0 24px}
+.intro{grid-column:1 / -1}.intro h1{font-size:clamp(32px,5vw,58px);line-height:1.1;letter-spacing:-.045em;margin:0}
+.intro p{max-width:680px;color:#50584c;margin:20px 0 0}.search,.request{min-width:0}
+label{display:block;font-weight:700;margin:0 0 9px}input{width:100%;min-height:48px;padding:12px;border:2px solid #747a6d;
+background:#fff;font:inherit}input:focus,button:focus-visible{outline:3px solid #c24f2d;outline-offset:2px}
+ul{padding:0;list-style:none;max-height:460px;overflow-y:auto}li{border-bottom:1px solid #ced4c7}
+li button{width:100%;text-align:left;background:none;border:0;color:#25352a;padding:14px 7px;font:inherit;cursor:pointer}
+li button:hover{background:#e0e8d9}.song{font-weight:750;display:block}.artist{color:#566255;font-size:14px}
+button[type=submit]{background:#b94d2f;border:0;color:white;font:700 16px system-ui;padding:14px 22px;cursor:pointer;margin-top:18px}
+.request{border-top:5px solid #b94d2f;background:#fffdfa;padding:24px;align-self:start}
+.request h2{font-size:22px;line-height:1.25;margin-top:0}.feedback{color:#4c5b50;font-size:14px}
+footer{border-top:1px solid #cad0c4;color:#535e53;padding:20px 0 34px;font-size:13px}
+@media(max-width:700px){main{display:block;padding-top:36px}.request{margin-top:24px}header{display:block}.intro h1{font-size:36px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}"""
+PUBLIC_JS = """'use strict';
+const qs=(id)=>document.getElementById(id),songs=qs('songs'),feedback=qs('feedback');
+const form=qs('request-form'),panel=qs('form-panel'),result=qs('result');
+let list=[],csrf='',chosen=null;
+const text=(el,v)=>{el.textContent=String(v??'')};
+function render(){
+  songs.replaceChildren();const q=qs('search').value.trim().toLocaleLowerCase();
+  const matching=list.filter(x=>(x.title+' '+x.artist).toLocaleLowerCase().includes(q)).slice(0,80);
+  text(feedback,matching.length?matching.length+' matching songs shown':'No matching songs');
+  for(const track of matching){
+    const li=document.createElement('li'),btn=document.createElement('button');
+    btn.type='button';btn.setAttribute('aria-label','Request '+track.title+' by '+track.artist);
+    const a=document.createElement('span'),b=document.createElement('span');
+    a.className='song';b.className='artist';text(a,track.title);text(b,track.artist);
+    btn.append(a,b);btn.addEventListener('click',()=>{
+      chosen=track;panel.hidden=false;text(qs('selected-title'),track.title+' — '+track.artist);
+      text(result,'');qs('name').focus();
+    });
+    li.append(btn);songs.append(li);
+  }
+}
+async function load(){
+  try{
+    const response=await fetch('/api/v1/public/catalog',{credentials:'same-origin',cache:'no-store'});
+    if(!response.ok)throw Error('Station library is unavailable');
+    const obj=await response.json();list=obj.songs;csrf=obj.csrf;
+    if(!Array.isArray(list)||!csrf)throw Error('Station catalog is not ready');render();
+  }catch(e){text(feedback,e.message);songs.replaceChildren()}
+}
+qs('search').addEventListener('input',render);
+form.addEventListener('submit',async(ev)=>{
+  ev.preventDefault();if(!chosen)return;const button=qs('send');button.disabled=true;
+  try{
+    const r=await fetch('/api/v1/public/requests',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cart:chosen.cart,requester:qs('name').value.trim(),csrf})});
+    const value=await r.json();if(!r.ok)throw Error(value.error||'Request was not accepted');
+    text(result,'Request received for review. Thank you!');form.reset();panel.hidden=true;
+    chosen=null;
+  }catch(e){text(result,e.message)}finally{button.disabled=false}
+});
+load();"""
+
+
 class RequestError(ValueError):
     pass
 
@@ -180,10 +264,12 @@ class RequestServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address, store: Store, listener_token: str, admin_token: str,
-                 catalog: Path, groups: frozenset[str], auto_approve: bool):
+                 catalog: Path, groups: frozenset[str], auto_approve: bool,
+                 public_portal: bool = False):
         super().__init__(address, RequestHandler)
         self.store, self.listener_token, self.admin_token = store, listener_token, admin_token
         self.catalog, self.groups, self.auto_approve = catalog, groups, auto_approve
+        self.public_portal = public_portal
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -199,6 +285,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -223,11 +311,61 @@ class RequestHandler(BaseHTTPRequestHandler):
             raise RequestError("Expected JSON object")
         return body
 
+    def static(self, content: str, kind: str, content_security: str):
+        data = content.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Content-Security-Policy", content_security)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def public_csrf(self, hour: int) -> str:
+        return hmac.new(self.server.admin_token.encode("ascii"),
+                        f"public:{self.client_address[0]}:{hour}".encode("ascii"),
+                        __import__("hashlib").sha256).hexdigest()
+
+    def public_catalog(self):
+        path = self.server.catalog
+        state = path.lstat()
+        if (not stat.S_ISREG(state.st_mode) or state.st_size > 16 * 1024 * 1024 or
+                state.st_uid != os.getuid()):
+            raise RequestError("Request catalog is not safe to publish")
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, list):
+            raise RequestError("Invalid request catalog")
+        safe = []
+        for row in rows:
+            if not isinstance(row, dict) or row.get("group") not in self.server.groups:
+                continue
+            cart = row.get("cart")
+            if type(cart) is not int or not 1 <= cart <= 999999:
+                continue
+            safe.append({"cart": cart, "title": str(row.get("title") or "")[:255],
+                         "artist": str(row.get("artist") or "")[:255]})
+            if len(safe) >= 10000:
+                break
+        self.response(200, {"songs": safe, "csrf": self.public_csrf(int(time.time() // 3600))})
+
     def do_GET(self):
         try:
             path = urlsplit(self.path)
             if path.path == "/healthz":
                 return self.response(200, {"status":"ok"})
+            if self.server.public_portal and not path.query:
+                csp = "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; script-src 'self'; style-src 'self'; connect-src 'self'"
+                if path.path == "/requests":
+                    return self.static(PUBLIC_HTML, "text/html; charset=utf-8", csp)
+                if path.path == "/requests/style.css":
+                    return self.static(PUBLIC_CSS, "text/css; charset=utf-8", csp)
+                if path.path == "/requests/app.js":
+                    return self.static(PUBLIC_JS, "text/javascript; charset=utf-8", csp)
+                if path.path == "/api/v1/public/catalog":
+                    return self.public_catalog()
             if path.path == "/api/v1/requests":
                 if not self.authorized("admin"):
                     return self.response(401, {"error":"unauthorized"})
@@ -243,6 +381,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             path = urlsplit(self.path)
             if path.query:
                 raise RequestError("Query parameters are not supported")
+            if path.path == "/api/v1/public/requests" and self.server.public_portal:
+                payload = self.payload()
+                if set(payload) != {"cart", "requester", "csrf"}:
+                    raise RequestError("Expected cart, requester and CSRF token")
+                submitted_csrf = payload["csrf"]
+                hour = int(time.time() // 3600)
+                if (not isinstance(submitted_csrf, str) or
+                        not any(hmac.compare_digest(submitted_csrf, self.public_csrf(t))
+                                for t in (hour, hour - 1))):
+                    return self.response(403, {"error":"Invalid or expired request session"})
+                eligible = catalog_ids(self.server.catalog, self.server.groups)
+                client_hash = identity_hash(self.client_address[0], self.server.admin_token)
+                row = self.server.store.submit(
+                    payload["cart"], payload["requester"], client_hash,
+                    eligible, auto_approve=False)
+                return self.response(202, row)
             if path.path == "/api/v1/requests":
                 if not self.authorized("listener"):
                     return self.response(401, {"error":"unauthorized"})
@@ -279,6 +433,8 @@ def main() -> int:
     p.add_argument("--listen",default="127.0.0.1")
     p.add_argument("--port",type=int,default=8787)
     p.add_argument("--moderated",action="store_true")
+    p.add_argument("--public-portal",action="store_true",
+                   help="Serve an uncredentialed listener page on loopback (requests always moderated)")
     args=p.parse_args()
     if args.listen not in ("127.0.0.1","::1"):
         raise RequestError("Only loopback binding supported; use a secured reverse proxy")
@@ -293,7 +449,7 @@ def main() -> int:
         raise RequestError("Listener and admin tokens must differ")
     store=Store(args.database)
     server=RequestServer((args.listen,args.port),store,listener,admin,
-                         args.catalog,groups,not args.moderated)
+                         args.catalog,groups,not args.moderated,args.public_portal)
     print(f"Rivendell request intake listening on {args.listen}:{args.port}",flush=True)
     server.serve_forever()
     return 0
