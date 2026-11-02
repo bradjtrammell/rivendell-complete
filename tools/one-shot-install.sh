@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fresh Ubuntu 26.04 amd64 test-station installation. Never source into SSH.
+# Direct foreground Ubuntu 26.04 amd64 test-station installation.
+# Do not source this script into an interactive shell.
 set -Eeuo pipefail
 umask 077
 
@@ -9,19 +10,18 @@ usage() {
   cat <<'HELP'
 Usage: bash tools/one-shot-install.sh
 
-Run as the normal desktop user, never root. Starts a persistent tmux session
-with a visible sudo prompt, private installation log and unattended native
-package build and local MariaDB installation. The encoder is installed but
-not configured or activated. Not approved for broadcasting.
+Run as the normal desktop user, never root. Runs in the foreground
+of the current SSH terminal; no terminal multiplexers or background jobs.
+Reuses valid local Debian packages when available, otherwise compiles from
+source. Installs local MariaDB and stages the encoder (does not activate it).
 
-Reconnect: tmux attach -t rivendell-install
-Logs:      ~/rivendell-install-logs/
+Logs: ~/rivendell-install-logs/
+Not approved for broadcasting until the station is commissioned and tested.
 HELP
 }
 if (( $# > 0 )); then
   case "$1" in
-    --help|-h) usage; exit 0 ;;
-    --run) (( $# == 1 )) || fail 'Unexpected arguments' ;;
+    --help|-h) (( $# == 1 )) || fail 'Unexpected arguments'; usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
 fi
@@ -33,35 +33,6 @@ source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Ubuntu 26.04 required'
 [[ "$(dpkg --print-architecture)" == amd64 ]] || fail 'amd64 required'
 [[ -w "$ROOT/.git" ]] || fail "Source checkout is not writable: $ROOT"
-
-if (( $# == 0 )); then
-  if ! command -v tmux >/dev/null 2>&1; then
-    say 'Installing tmux for SSH-safe operation'
-    sudo apt-get update
-    sudo apt-get install -y tmux
-  fi
-  if [[ -n "${TMUX:-}" ]]; then
-    bash "$ROOT/tools/one-shot-install.sh" --run
-    exit $?
-  fi
-  SESSION=rivendell-install
-  if tmux has-session -t "$SESSION" 2>/dev/null; then
-    if tmux list-panes -t "$SESSION" -F '#{pane_dead}' | grep -qx 0; then
-      say "Rejoining active installation session $SESSION"
-      tmux attach-session -t "$SESSION"
-      exit $?
-    fi
-    say "Previous pane has exited; log preserved. Starting new installation session."
-    tmux kill-session -t "$SESSION"
-  fi
-  tmux new-session -d -s "$SESSION" -n installation
-  tmux set-window-option -t "$SESSION:0" remain-on-exit on
-  printf -v command 'bash %q --run' "$ROOT/tools/one-shot-install.sh"
-  tmux send-keys -t "$SESSION:0.0" "$command" Enter
-  say "Installer launched; reconnect with: tmux attach -t $SESSION"
-  tmux attach-session -t "$SESSION"
-  exit $?
-fi
 
 LOG_DIR="$HOME/rivendell-install-logs"
 mkdir -p "$LOG_DIR"
@@ -79,7 +50,7 @@ on_exit() {
     say "INSTALLATION FAILED (exit $rc). No automatic cleanup or destructive reset was performed."
   fi
   say "Installation log: $LOG"
-  say 'You may detach this tmux window using Ctrl+B, then D.'
+  say 'The command has exited; your SSH shell remains available.'
 }
 trap on_exit EXIT
 

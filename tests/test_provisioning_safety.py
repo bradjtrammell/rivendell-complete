@@ -35,14 +35,15 @@ class ProvisioningTests(unittest.TestCase):
         p = subprocess.run(["bash", str(ROOT / "tools" / "one-shot-install.sh"), "--help"],
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertIn("tmux", p.stdout)
+        self.assertIn("foreground", p.stdout)
         s = (ROOT / "tools" / "one-shot-install.sh").read_text()
-        for marker in ("remain-on-exit on", "sudo -v", "git merge --ff-only origin/dev",
+        for marker in ("sudo -v", "git merge --ff-only origin/dev",
                        "--install --streaming --jobs 2", "INSTALLATION FAILED"):
             self.assertIn(marker, s)
         self.assertNotIn("git clean -", s)
         self.assertNotIn("git reset --hard", s)
-        self.assertIn("tmux kill-session", s)
+        self.assertNotIn("tmux", s)
+        self.assertNotIn("nohup", s)
         self.assertIn("--install-existing --streaming --jobs 2", s)
 
     def test_package_resume_and_reauth(self):

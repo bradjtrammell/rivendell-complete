@@ -86,12 +86,13 @@ cd ~/rivendell-complete && git fetch origin dev && git switch dev && git merge -
 If sudo expires after native compilation, rerun the command to reuse the
 already compiled packages and resume installation without rebuilding them.
 
-The installer uses a persistent tmux session, prompts for sudo inside that
-terminal, builds and installs native Ubuntu 26 packages, configures local
-MariaDB and installs (but does not activate) the streaming encoder.
-It saves a private log under `~/rivendell-install-logs/`. If SSH disconnects,
-run `tmux attach -t rivendell-install` to reconnect. It refuses to destroy
-an existing Rivendell installation or database.
+The installer runs directly in the current SSH shell, without a detached
+session or terminal multiplexer. It prompts for sudo, reuses existing native
+packages when available (or builds from source), configures local MariaDB,
+and installs (but does not activate) the streaming encoder.
+It saves a private log under `~/rivendell-install-logs/`; keep SSH connected
+through installation. It refuses to overwrite an existing Rivendell
+installation or database.
 
 **Status:** Experimental. Native packaging and end-to-end fresh installation
 have not passed qualification. A build/install error is possible; consult the
