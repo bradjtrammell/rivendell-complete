@@ -5,7 +5,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ("setup-nas.sh", "install-ubuntu26.sh", "install-streaming.sh",
-         "install-requests.sh", "install-loggen.sh", "deploy-test-system.sh", "one-shot-install.sh")
+         "install-requests.sh", "install-loggen.sh", "deploy-test-system.sh", "one-shot-install.sh",
+         "install-station-utilities.sh")
 
 
 class ProvisioningTests(unittest.TestCase):
@@ -47,6 +48,17 @@ class ProvisioningTests(unittest.TestCase):
         self.assertIn("--install-existing --streaming --jobs 2", s)
         self.assertIn("rdcomplete-jack-route", s)
         self.assertIn("rdlogmanager rdlogedit rdpanel", s)
+        self.assertIn("rdcomplete-stationplan", s)
+        self.assertIn("rdcomplete-live-requests", s)
+
+    def test_staged_utilities_never_start_live_services(self):
+        installer = (ROOT / "tools" / "install-station-utilities.sh").read_text()
+        self.assertIn('install -m 0755 "$source_path"', installer)
+        self.assertIn('"$BIN/rdcomplete-$name"', installer)
+        self.assertNotIn("systemctl enable", installer)
+        self.assertNotIn("sudo ", installer)
+        deployer = (ROOT / "tools" / "deploy-test-system.sh").read_text()
+        self.assertIn("bash tools/install-station-utilities.sh", deployer)
 
     def test_package_resume_and_reauth(self):
         installer = (ROOT / "tools" / "install-ubuntu26.sh").read_text()

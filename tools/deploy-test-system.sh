@@ -64,7 +64,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$ROOT"
 log 'Checking installer syntax and Python modules'
 bash -n tools/setup-nas.sh tools/install-ubuntu26.sh tools/install-streaming.sh \
-  tools/install-requests.sh tools/install-loggen.sh tools/deploy-test-system.sh
+  tools/install-requests.sh tools/install-loggen.sh tools/install-station-utilities.sh tools/deploy-test-system.sh
 python3 -m compileall -q tools tests
 if [[ "$mode" == check ]]; then
   log 'Running the development regression suite (check-only; never blocks an installed station)'
@@ -98,6 +98,8 @@ if [[ -n "$group" ]]; then
   log 'Installing request service (service remains OFF)'
   bash tools/install-requests.sh "$group"
 fi
-log 'Test install complete; it is NOT air-qualified'
+log 'Staging catalog, scheduling, requests and diagnostics command-line tools'
+bash tools/install-station-utilities.sh
+log 'Test install staging complete; it is NOT air-qualified'
 log 'Next: configure RDAdmin/service, NAS references, stream and JACK outputs'
 log 'Diagnostics: python3 tools/rdselftest.py --strict --json'

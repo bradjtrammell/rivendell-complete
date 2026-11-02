@@ -90,7 +90,7 @@ dpkg-query -W rivendell rivendell-webapi
 for app in rdadmin rdairplay rdlibrary rdlogmanager rdlogedit rdpanel rdcatch rdcastmanager rddbmgr; do
   command -v "$app" || fail "Missing installed application: $app"
 done
-for tool in rdcomplete-stream rdcomplete-metadata rdcomplete-jack-route; do
+for tool in rdcomplete-stream rdcomplete-metadata rdcomplete-jack-route rdcomplete-stationplan rdcomplete-smartclock rdcomplete-catalog rdcomplete-external-media rdcomplete-requests rdcomplete-live-requests rdcomplete-selftest rdcomplete-loggen; do
   [[ -x "$HOME/.local/bin/$tool" ]] || fail "Missing staged station component: $tool"
   say "Staged tool: $HOME/.local/bin/$tool"
 done

@@ -95,6 +95,8 @@ The installer runs directly in the current SSH shell, without a detached
 session or terminal multiplexer. It prompts for sudo, reuses existing native
 packages when available (or builds from source), configures local MariaDB,
 and stages streaming tools and user units without activating a live stream.
+It also installs the implemented catalog, scheduler, request, live-request,
+and diagnostic CLI tools in `~/.local/bin`, without enabling public services.
 Development regression tests (including network/socket tests) run only in
 explicit check-only mode, never in installation mode.
 It saves a private log under `~/rivendell-install-logs/`; keep SSH connected
