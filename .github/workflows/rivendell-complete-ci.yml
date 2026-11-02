@@ -26,8 +26,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Check Python and run tests
         run: |
-          python3 -m py_compile tools/rdexternal.py tools/rdcatalog.py tools/rdsmartclock.py tools/rdstationplan.py tools/rdstream.py tools/rdmetadata.py tools/pypad_glasscoder.py tools/rdsweepers.py tools/rdrequests.py tools/rdlive.py tools/rdselftest.py tools/rdjackroute.py tools/rdloggen.py tests/test_rdexternal.py tests/test_rdcatalog.py tests/test_rdsmartclock.py tests/test_rdstationplan.py tests/test_rdstream.py tests/test_rdmetadata.py tests/test_rdrequests.py tests/test_rdlive.py tests/test_rdsweepers.py tests/test_rdselftest.py tests/test_rdjackroute.py tests/test_rdloggen.py
-          bash -n tools/install-ubuntu26.sh tools/install-streaming.sh tools/install-loggen.sh tools/setup-nas.sh tools/install-requests.sh tools/deploy-test-system.sh tools/normalize-branches.sh
+          python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py tools/rdexternal.py tools/rdcatalog.py tools/rdsmartclock.py tools/rdstationplan.py tools/rdstream.py tools/rdmetadata.py tools/pypad_glasscoder.py tools/rdsweepers.py tools/rdrequests.py tools/rdlive.py tools/rdselftest.py tools/rdjackroute.py tools/rdloggen.py tests/test_rdexternal.py tests/test_rdcatalog.py tests/test_rdsmartclock.py tests/test_rdstationplan.py tests/test_rdstream.py tests/test_rdmetadata.py tests/test_rdrequests.py tests/test_rdlive.py tests/test_rdsweepers.py tests/test_rdselftest.py tests/test_rdjackroute.py tests/test_rdloggen.py
+          bash -n tools/install-control-center.sh tools/finish-complete.sh tools/install-ubuntu26.sh tools/install-streaming.sh tools/install-loggen.sh tools/setup-nas.sh tools/install-requests.sh tools/deploy-test-system.sh tools/normalize-branches.sh
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
   ubuntu26-native-build:
@@ -91,3 +91,31 @@ jobs:
           path: ../*.deb
           if-no-files-found: error
           retention-days: 14
+
+  control-center-tests:
+    name: Headless native Qt Control Center smoke test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install native PyQt5 runtime
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-pyqt5
+      - name: Compile source and launch native Qt widgets offscreen
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          /usr/bin/python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py
+          bash -n tools/install-control-center.sh tools/finish-complete.sh
+          /usr/bin/python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "tools")
+          from PyQt5.QtWidgets import QApplication
+          from PyQt5.QtCore import QTimer
+          from rdcomplete_control import Console
+          app = QApplication([])
+          window = Console()
+          assert window.menu.count() == 7
+          assert window.pages.count() == 7
+          QTimer.singleShot(350, app.quit)
+          app.exec_()
+          print("Headless native Qt console initialized")
+          PY

@@ -123,6 +123,12 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
    dependency with an executable preflight. Actual audio routing remains
    unqualified until tested on the workstation.
 
+9. Added native Qt station operations GUI for NAS, library import, local
+   request queue, stream configuration, JACK routing and scheduling. It
+   installs a root-owned helper rather than executing privileged code from
+   the user-writable checkout. This still does not qualify real on-air audio,
+   public listener requests, waveform editor support or dynamic backtiming.
+
 ## Implementation references
 
 - [Ubuntu 26.04 commissioning](STATION_SETUP.md)

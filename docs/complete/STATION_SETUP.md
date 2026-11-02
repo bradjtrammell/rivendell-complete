@@ -184,6 +184,21 @@ scheduled log generation and listener-request services only after those names
 have been created in RDAdmin. The installer does not invent station names,
 NAS addresses, or stream destinations, and does not activate broadcast output.
 
+## Native Rivendell Complete Control Center
+
+On an already-installed Ubuntu 26.04 desktop, use:
+```bash
+bash tools/finish-complete.sh --service Production --request-group MUSIC
+```
+The Ubuntu Applications menu then contains **Rivendell Complete**.
+Launch it from the graphical desktop, not an SSH-only shell. The NAS manager
+authenticates with polkit; source music remains read-only. New metadata
+imports are refused while RDAirPlay is running. The stream and request
+services remain off until explicitly configured and started.
+
+This is an integrated operator surface, not a production-qualified
+complete release.
+
 ## Broadcast qualification still required
 
 - Pass native Ubuntu 26.04 build and install; launch RDAdmin, RDLibrary,

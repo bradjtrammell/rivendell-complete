@@ -6,7 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ("setup-nas.sh", "install-ubuntu26.sh", "install-streaming.sh",
          "install-requests.sh", "install-loggen.sh", "deploy-test-system.sh", "one-shot-install.sh",
-         "install-station-utilities.sh", "finish-complete.sh")
+         "install-station-utilities.sh", "finish-complete.sh", "install-control-center.sh")
 
 
 class ProvisioningTests(unittest.TestCase):
@@ -106,6 +106,7 @@ class ProvisioningTests(unittest.TestCase):
         self.assertIn("Rivendell.GROUPS", script)
         self.assertIn("Rivendell.SERVICES", script)
         self.assertIn("--skip-dependencies", script)
+        self.assertIn('bash "$ROOT/tools/install-control-center.sh"', script)
         self.assertNotIn('dpkg-buildpackage', script)
         self.assertNotIn('apt-get install', script)
         self.assertNotIn('mariadb -e', script)

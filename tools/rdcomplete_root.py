@@ -117,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         sub = commands.add_parser(name)
         sub.add_argument("--source", required=True)
     commands.add_parser("configure-external")
+    commands.add_parser("export-catalog")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
@@ -151,6 +152,16 @@ def main(argv: list[str] | None = None) -> int:
         configure_external()
     elif args.action == "configure-external":
         configure_external()
+    elif args.action == "export-catalog":
+        script = HERE / "rdcatalog.py"
+        if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
+            raise CommissionError("Privileged catalog exporter is not root-owned")
+        completed = subprocess.run(
+            ["/usr/bin/python3", str(script), "--group", "MUSIC"],
+            timeout=300, check=False,
+        )
+        if completed.returncode:
+            raise CommissionError(f"Catalog export failed (exit {completed.returncode})")
     else:
         if not GROUP_PATTERN.fullmatch(args.group):
             raise CommissionError("Invalid Rivendell group")

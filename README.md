@@ -141,6 +141,25 @@ RDAdmin. Public listener requests, stream credentials, NAS mount paths, audio
 routing, live scheduling and GUI integration still require commissioning or
 additional engineering; **this command is not a complete 5.0 release**.
 
+### Native Qt station control center
+
+A native **Rivendell Complete** desktop application is installed by
+`tools/finish-complete.sh`, with a root-owned helper for NAS operations.
+It uses Ubuntu 26.04 `python3-pyqt5` and `pkexec`, and launches from
+the Ubuntu desktop applications menu as `rdcomplete-control`.
+
+The GUI provides read-only station readiness checks, NFS/SMB NAS mounting,
+external-media configuration, music scanning/import confirmation, request
+catalog export, local request queue moderation, source stream configuration,
+stereo JACK routing and log timer controls. Source audio is never copied or
+rewritten; start/enable actions require explicit confirmation. Privileged
+scripts are installed root-owned, not executed from the user-writable checkout.
+
+This is an integration pass, **not proof of on-air qualification**.
+FLAC external playout, waveform editing for NAS originals, live backtiming,
+a public listener request portal, emergency silence failover, and production
+rollback are still incomplete.
+
 ### Developer build (not a station installation)
 
 ```bash

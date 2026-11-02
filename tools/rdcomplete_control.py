@@ -343,7 +343,9 @@ class Console(QMainWindow):
     def launch(self, executable: str):
         if executable not in ("rdadmin", "rdairplay", "rdlogmanager", "rdlibrary", "rdlogedit"):
             return
-        if not QProcess.startDetached(executable, []):
+        result = QProcess.startDetached(executable, [])
+        launched = result[0] if isinstance(result, tuple) else result
+        if not launched:
             self._alert(f"Could not open {executable}; use the Ubuntu desktop session.")
 
     def _root(self, action: str, params: list[str] | None = None,
@@ -406,6 +408,11 @@ class Console(QMainWindow):
     def _error(self, failure):
         if failure == QProcess.FailedToStart:
             self._alert("Could not start the required program. Check its installation and desktop authentication agent.")
+            self.busy = False
+            self.progress.hide()
+            for button in self.buttons:
+                button.setEnabled(True)
+            self.status.setText("Unable to launch required command.")
 
     def _finished(self, code: int, status):
         self._read_output()
@@ -422,7 +429,7 @@ class Console(QMainWindow):
             except (OSError, ValueError, RuntimeError) as exc:
                 good = False
                 self._alert(f"Catalog export could not be saved: {exc}")
-        elif mode == "readiness" and good:
+        elif mode == "readiness":
             try:
                 report = json.loads(bytes(self.output))
                 summary = "\n".join(
@@ -511,7 +518,7 @@ class Console(QMainWindow):
         self.status.setText("Request catalog updated safely.")
 
     def export_catalog(self):
-        self.execute(["rdcomplete-catalog", "--group", GROUP], "catalog")
+        self._root("export-catalog", mode="catalog")
 
     def start_requests(self):
         catalog = STATE / "request-catalog.json"
@@ -584,9 +591,14 @@ class Console(QMainWindow):
     def save_stream(self):
         from urllib.parse import urlsplit
         url = self.stream_url.text().strip()
-        parsed = urlsplit(url)
-        if (parsed.scheme != "http" or not parsed.hostname or not parsed.port
-                or parsed.username or parsed.password or parsed.query or parsed.fragment):
+        try:
+            parsed = urlsplit(url)
+            valid_url = (parsed.scheme == "http" and parsed.hostname and parsed.port
+                         and not parsed.username and not parsed.password
+                         and not parsed.query and not parsed.fragment)
+        except ValueError:
+            valid_url = False
+        if not valid_url:
             self._alert("Use an http://HOST:PORT/path URL without embedded credentials.")
             return
         username = self.stream_username.text()

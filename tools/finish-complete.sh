@@ -143,5 +143,10 @@ done
 for unit in rdcomplete-stream.service rdcomplete-jack-route.service; do
   [[ -f "$HOME/.config/systemd/user/$unit" ]] || fail "Missing user service file: $unit"
 done
+say "Installing native Rivendell Complete operator console"
+bash "$ROOT/tools/install-control-center.sh" ||
+  fail "Native operator console installation failed; existing station and database preserved"
+command -v rdcomplete-control >/dev/null ||
+  fail "Control Center launcher missing after installation"
 say "COMPONENT STAGING FINISHED. No broadcast services, NAS sources, clocks, or remote streams were activated."
 say "External NAS address, station service/groups, stream server and source credentials still require actual station configuration."
