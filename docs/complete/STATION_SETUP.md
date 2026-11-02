@@ -172,7 +172,7 @@ bash tools/finish-complete.sh
 
 This stages actual catalog, offline schedules, request processing, live-request
 dispatcher and station diagnostics as `~/.local/bin/rdcomplete-*`, plus desktop
-launchers for installed Rivendell programs. If GlassCoder/JACK are not already
+launchers for installed Rivendell programs. If GlassCoder/JACK and `jack-example-tools` are not already
 installed, it attempts to install those packages without deleting APT locks
 or killing their current holder. For a locked package manager, the command
 exits status 2 after staging the independent utilities; inspect the holder

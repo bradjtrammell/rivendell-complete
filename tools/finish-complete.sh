@@ -116,7 +116,7 @@ if (( SKIP_PACKAGES == 1 )); then
   bash "$ROOT/tools/install-streaming.sh" --skip-dependencies
 else
   deps_ready=1
-  for package in glasscoder jack-tools jackd2; do
+  for package in glasscoder jack-tools jackd2 jack-example-tools; do
     if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || :)" != "install ok installed" ]]; then
       deps_ready=0
     fi

@@ -27,7 +27,7 @@ if (( SKIP_DEPENDENCIES == 1 )); then
   echo 'Skipping APT; streaming binaries and disabled service files will still be staged.'
 else
   all_installed=1
-  for package in glasscoder jack-tools jackd2; do
+  for package in glasscoder jack-tools jackd2 jack-example-tools; do
     [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || :)" == "install ok installed" ]] || all_installed=0
   done
   if (( all_installed == 1 )); then
@@ -41,13 +41,19 @@ else
     echo 'Installing GlassCoder/JACK; waiting up to 300 seconds for any active dpkg transaction'
     if ! sudo env DEBIAN_FRONTEND=noninteractive apt-get \
         -o DPkg::Lock::Timeout=300 \
-        install -y --no-install-recommends glasscoder jack-tools jackd2; then
+        install -y --no-install-recommends glasscoder jack-tools jackd2 jack-example-tools; then
       echo 'ERROR: GlassCoder/JACK package installation failed or package lock timed out.' >&2
       echo 'Check any other apt process with: ps -eo pid,ppid,etime,stat,cmd | grep -E "[a]pt-get|[d]pkg|[u]nattended-upgrade"' >&2
       echo 'The Rivendell database, compiled packages, and station configuration have not been removed.' >&2
       exit 1
     fi
   fi
+fi
+if (( SKIP_DEPENDENCIES == 0 )); then
+  for program in glasscoder jack_lsp jack_connect jack_disconnect; do
+    command -v "$program" >/dev/null ||
+      { echo "ERROR: required streaming/JACK tool missing: $program" >&2; exit 1; }
+  done
 fi
 install -d -m 0700 "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 0755 "$here/rdstream.py" "$HOME/.local/bin/rdcomplete-stream"

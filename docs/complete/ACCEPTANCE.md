@@ -115,6 +115,14 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
    The post-install component command now stages independent tools and desktop
    shortcuts before checking APT contention.
 
+8. Ubuntu 26.04 ships `jack_lsp`, `jack_connect` and `jack_disconnect`
+   in the `jack-example-tools` package. A real workstation installed
+   GlassCoder, jack-tools and jackd2 successfully but the operator's subsequent
+   `command -v jack_lsp` failed. Because the installer intentionally uses
+   `--no-install-recommends`, `jack-example-tools` must be an explicit
+   dependency with an executable preflight. Actual audio routing remains
+   unqualified until tested on the workstation.
+
 ## Implementation references
 
 - [Ubuntu 26.04 commissioning](STATION_SETUP.md)

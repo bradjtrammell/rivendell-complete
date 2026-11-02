@@ -124,7 +124,10 @@ The completion command installs available command-line catalog, offline clock,
 request and diagnostics tools, plus missing user desktop shortcuts for existing
 Rivendell applications, before attempting GlassCoder/JACK installation.
 The streaming scripts and disabled user service units are staged even if APT
-is locked. Already-installed GlassCoder/JACK packages do not trigger APT.
+is locked. Already-installed GlassCoder/JACK packages do not trigger APT. Ubuntu 26.04
+ships `jack_lsp`, `jack_connect` and `jack_disconnect` in
+`jack-example-tools` rather than `jack-tools`, so the installer explicitly
+installs and verifies that fourth dependency even with no recommends.
 Optional station group and service names are checked against the live database. If APT
 is locked by another process it leaves that transaction alone and exits with
 status 2; already-staged utilities remain intact. Use `--no-packages` to stage
