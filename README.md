@@ -74,6 +74,26 @@ The initial qualification profile is:
 
 These specifications are an initial supported target, **not** a restriction that Rivendell Complete can only serve that hardware or terrestrial broadcasters.
 
+### One-command installation on a fresh Ubuntu 26.04 workstation
+
+Log in as the regular desktop user (not root). In your existing checkout,
+paste this one command:
+
+```bash
+cd ~/rivendell-complete && git fetch origin dev && git switch dev && git merge --ff-only origin/dev && bash tools/one-shot-install.sh
+```
+
+The installer uses a persistent tmux session, prompts for sudo inside that
+terminal, builds and installs native Ubuntu 26 packages, configures local
+MariaDB and installs (but does not activate) the streaming encoder.
+It saves a private log under `~/rivendell-install-logs/`. If SSH disconnects,
+run `tmux attach -t rivendell-install` to reconnect. It refuses to destroy
+an existing Rivendell installation or database.
+
+**Status:** Experimental. Native packaging and end-to-end fresh installation
+have not passed qualification. A build/install error is possible; consult the
+log rather than wiping the test workstation.
+
 ### Developer build (not a station installation)
 
 ```bash
