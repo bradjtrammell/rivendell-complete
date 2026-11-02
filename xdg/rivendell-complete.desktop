@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Rivendell Complete
+GenericName=Station Operations & Setup
+Comment=Configure NAS audio, music, listener requests and broadcast routing
+Exec=/usr/local/bin/rdcomplete-control
+Icon=audio-card
+Categories=Audio;AudioVideo;Qt;
+Terminal=false
+StartupNotify=true
