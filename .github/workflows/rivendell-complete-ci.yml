@@ -11,7 +11,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
       - name: Check Python and run tests
         run: |
           python3 -m py_compile tools/rdexternal.py tools/rdcatalog.py tools/rdsmartclock.py tools/rdstationplan.py tools/rdstream.py tools/rdmetadata.py tools/pypad_glasscoder.py tools/rdsweepers.py tools/rdrequests.py tools/rdlive.py tools/rdselftest.py tools/rdjackroute.py tools/rdloggen.py tests/test_rdexternal.py tests/test_rdcatalog.py tests/test_rdsmartclock.py tests/test_rdstationplan.py tests/test_rdstream.py tests/test_rdmetadata.py tests/test_rdrequests.py tests/test_rdlive.py tests/test_rdsweepers.py tests/test_rdselftest.py tests/test_rdjackroute.py tests/test_rdloggen.py
-          bash -n tools/install-ubuntu26.sh tools/install-streaming.sh tools/install-loggen.sh tools/setup-nas.sh tools/install-requests.sh tools/deploy-test-system.sh
+          bash -n tools/install-ubuntu26.sh tools/install-streaming.sh tools/install-loggen.sh tools/setup-nas.sh tools/install-requests.sh tools/deploy-test-system.sh tools/normalize-branches.sh
           python3 -m unittest discover -s tests -p 'test_*.py' -v
 
   ubuntu26-native-build:

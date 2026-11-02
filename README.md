@@ -6,7 +6,7 @@ Rivendell Complete extends [Rivendell 4](https://github.com/ElvishArtisan/rivend
 
 **Internet-only stations do not need an FM transmitter or broadcast sound card.** Terrestrial stations can use the same platform for a local studio/transmitter feed and simultaneous internet streaming.
 
-> **Branch policy:** `master` preserves the original Rivendell 4 source. `dev` is Rivendell Complete 5.0 development. All product engineering happens on `dev`.
+> **Branch policy:** `master` preserves the original Rivendell 4 source. `dev` is Rivendell Complete 5.0 development. All product engineering happens on `dev`. To finish removing the two superseded remote branches, a repository administrator can run `bash tools/normalize-branches.sh --apply` from a GitHub CLI-authenticated workstation after reviewing its ancestry guards.
 
 > **Release status:** Active development. Some components exist and pass automated tests; a complete Ubuntu 26.04 installation and an uninterrupted on-air station have **not** been verified. This repository is not yet a production release. The [acceptance ledger](docs/complete/ACCEPTANCE.md) tracks every requirement, including unfinished work.
 
