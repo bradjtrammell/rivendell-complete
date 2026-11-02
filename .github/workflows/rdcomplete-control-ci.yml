@@ -6,6 +6,10 @@ on:
     paths:
       - "tools/rdcomplete_control.py"
       - "tools/rdcomplete_root.py"
+      - "tools/rdrequests.py"
+      - "tools/upgrade-request-portal.py"
+      - "tools/install-requests.sh"
+      - "tests/test_rdrequests.py"
       - "tools/install-control-center.sh"
       - "tools/finish-complete.sh"
       - "tools/setup-nas.sh"
@@ -30,11 +34,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends python3-pyqt5
       - name: Static Python and shell checks
         run: |
-          /usr/bin/python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py tools/rdexternal.py tools/rdcatalog.py
-          bash -n tools/install-control-center.sh tools/finish-complete.sh tools/setup-nas.sh
+          /usr/bin/python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py tools/rdexternal.py tools/rdcatalog.py tools/rdrequests.py tools/upgrade-request-portal.py
+          bash -n tools/install-control-center.sh tools/install-requests.sh tools/finish-complete.sh tools/setup-nas.sh
       - name: Native control-center regression tests
         run: |
           /usr/bin/python3 -m unittest discover -s tests -p test_control_center.py -v
+          /usr/bin/python3 -m unittest discover -s tests -p test_rdrequests.py -v
       - name: Launch Qt widgets with offscreen display
         env:
           QT_QPA_PLATFORM: offscreen

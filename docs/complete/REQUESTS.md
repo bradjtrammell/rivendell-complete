@@ -6,7 +6,10 @@ Public requests are moderated and available from the local station page
 `http://127.0.0.1:8787/requests` when the unit is configured with
 `--public-portal --moderated`. The page serves only sanitized MUSIC
 catalog metadata; listeners never receive the private API bearer tokens.
-The endpoint is still loopback-only. Do not publish it without TLS, trusted
+Existing generated request unit files are upgraded idempotently during the
+Control Center installation, with a 0600 recovery copy and without changing
+the tokens or starting the request service. Custom service files are refused
+rather than silently overwritten. The endpoint is still loopback-only. Do not publish it without TLS, trusted
 proxy configuration and a sound per-listener rate-limiting design.
 All listeners behind one local proxy share a rate-limit identity by default,
 so this is **not yet a qualified WAN-facing website**.

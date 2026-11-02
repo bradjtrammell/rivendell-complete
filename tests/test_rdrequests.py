@@ -78,6 +78,48 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(payload["status"],"approved")
         self.assertEqual(call("GET","/api/v1/requests",token="A"*48)[0],200)
         self.assertEqual(call("GET","/healthz")[0],200)
+    def test_public_listener_page_requires_csrf_and_moderation(self):
+        catalog=self.root/"catalog-public.json"
+        catalog.write_text(json.dumps([{
+            "cart":100001,"group":"MUSIC",
+            "title":"Example Track","artist":"Example Artist",
+        }]))
+        server=mod.RequestServer(("127.0.0.1",0),self.store,
+                                "L"*48,"A"*48,catalog,frozenset(("MUSIC",)),
+                                False,public_portal=True)
+        thread=threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        def call(method,path,payload=None):
+            conn=http.client.HTTPConnection("127.0.0.1",server.server_port,timeout=3)
+            data=json.dumps(payload) if payload is not None else None
+            conn.request(method,path,body=data,headers={"Content-Type":"application/json"})
+            response=conn.getresponse()
+            body=response.read()
+            status=response.status
+            conn.close()
+            return status,body
+        code,page=call("GET","/requests")
+        self.assertEqual(code,200)
+        self.assertIn(b"What should we play next?",page)
+        self.assertNotIn(("L"*48).encode(),page)
+        code,asset=call("GET","/requests/app.js")
+        self.assertEqual(code,200)
+        self.assertIn(b"/api/v1/public/requests",asset)
+        code,catalog_data=call("GET","/api/v1/public/catalog")
+        self.assertEqual(code,200)
+        public=json.loads(catalog_data)
+        self.assertEqual(public["songs"][0]["title"],"Example Track")
+        self.assertNotIn("token",str(public).lower())
+        payload={"cart":100001,"requester":"Listener","csrf":"invalid"}
+        self.assertEqual(call("POST","/api/v1/public/requests",payload)[0],403)
+        payload["csrf"]=public["csrf"]
+        code,response=call("POST","/api/v1/public/requests",payload)
+        self.assertEqual(code,202)
+        self.assertEqual(json.loads(response)["status"],"pending")
+        self.assertEqual(len(self.store.queue("pending")),1)
+
     def test_client_hmac_does_not_expose_ip(self):
         digest=mod.identity_hash("127.0.0.1","secret")
         self.assertEqual(len(digest),64)

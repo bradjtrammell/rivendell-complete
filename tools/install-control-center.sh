@@ -8,7 +8,7 @@ source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Requires Ubuntu 26.04'
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas.sh \
-            tools/rdexternal.py tools/rdcatalog.py xdg/rivendell-complete.desktop; do
+            tools/rdexternal.py tools/rdcatalog.py tools/upgrade-request-portal.py xdg/rivendell-complete.desktop; do
   [[ -f "$ROOT/$path" && ! -L "$ROOT/$path" ]] || fail "Missing or symlinked source: $path"
 done
 if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null ||
@@ -31,6 +31,12 @@ sudo install -o root -g root -m 0755 "$ROOT/tools/rdcomplete_root.py" \
   /usr/local/libexec/rivendell-complete/rdcomplete_root.py
 sudo install -o root -g root -m 0755 "$ROOT/tools/rdcomplete_control.py" \
   /usr/local/bin/rdcomplete-control
+# Upgrade only a previously generated service, retaining its original credentials.
+if [[ -f "$HOME/.config/systemd/user/rdcomplete-requests.service" ]]; then
+  /usr/bin/python3 "$ROOT/tools/upgrade-request-portal.py" ||
+    fail 'Listener service was customized or unsafe; preserving it for inspection'
+  systemctl --user daemon-reload || fail 'Could not reload user service definitions'
+fi
 sudo install -o root -g root -m 0644 "$ROOT/xdg/rivendell-complete.desktop" \
   /usr/share/applications/rivendell-complete.desktop
 for name in /usr/local/bin/rdcomplete-control \
