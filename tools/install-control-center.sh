@@ -11,7 +11,8 @@ for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas
             tools/rdexternal.py tools/rdcatalog.py xdg/rivendell-complete.desktop; do
   [[ -f "$ROOT/$path" && ! -L "$ROOT/$path" ]] || fail "Missing or symlinked source: $path"
 done
-if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null; then
+if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null ||
+   ! command -v pkexec >/dev/null; then
   echo 'Installing the native Qt GUI runtime from Ubuntu 26.04 repositories'
   sudo -v
   sudo env DEBIAN_FRONTEND=noninteractive apt-get \

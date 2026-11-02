@@ -438,12 +438,12 @@ class Console(QMainWindow):
                 self.health.setPlainText(summary)
             except (ValueError, KeyError, TypeError):
                 pass
-        if mode in ("mount", "import", "stream-check", "request-start", "schedule-enable") and not good:
+        if mode in ("mount", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog") and not good:
             details = bytes(self.output).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
         if mode == "import" and good:
-            self._confirm("Music import completed",
-                          "Import finished. Export an updated request catalog on the Listener requests page.")
+            QMessageBox.information(self, "Music import completed",
+                                    "Import finished. Export an updated request catalog on the Listener requests page.")
         self.command.deleteLater()
         self.command = None
         self.output = bytearray()

@@ -112,7 +112,7 @@ else
 fi
 
 if (( SKIP_PACKAGES == 1 )); then
-  say "Skipping APT as requested; staging stream scripts and disabled units"
+  say "Skipping streaming APT as requested; staging stream scripts and disabled units"
   bash "$ROOT/tools/install-streaming.sh" --skip-dependencies
 else
   deps_ready=1

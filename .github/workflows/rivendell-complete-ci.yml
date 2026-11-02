@@ -103,7 +103,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          /usr/bin/python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py
+          /usr/bin/python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py tests/test_control_center.py
+          /usr/bin/python3 -m unittest discover -s tests -p test_control_center.py -v
           bash -n tools/install-control-center.sh tools/finish-complete.sh
           /usr/bin/python3 - <<'PY'
           import sys
