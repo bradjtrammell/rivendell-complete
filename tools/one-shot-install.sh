@@ -86,6 +86,7 @@ else
 fi
 
 say 'Verifying native packages and programs'
+command -v rdcomplete-control || fail 'Rivendell Complete operator console is missing'
 dpkg-query -W rivendell rivendell-webapi
 for app in rdadmin rdairplay rdlibrary rdlogmanager rdlogedit rdpanel rdcatch rdcastmanager rddbmgr; do
   command -v "$app" || fail "Missing installed application: $app"

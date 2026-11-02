@@ -59,6 +59,7 @@ class ControlCenterSafety(unittest.TestCase):
         self.assertIn("/usr/local/libexec/rivendell-complete", installer)
         self.assertIn("sudo install -o root -g root", installer)
         self.assertIn("python3-pyqt5 pkexec", installer)
+        self.assertIn("SKIP_PACKAGES=1", installer)
         self.assertIn("xdg/rivendell-complete.desktop", installer)
         self.assertNotIn("rm -rf", installer)
         self.assertNotIn("git reset", installer)

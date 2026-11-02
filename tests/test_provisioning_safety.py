@@ -59,6 +59,7 @@ class ProvisioningTests(unittest.TestCase):
         self.assertNotIn("sudo ", installer)
         deployer = (ROOT / "tools" / "deploy-test-system.sh").read_text()
         self.assertIn("bash tools/install-station-utilities.sh", deployer)
+        self.assertIn("bash tools/install-control-center.sh", deployer)
 
     def test_streaming_package_lock_wait_is_non_destructive(self):
         script = (ROOT / "tools" / "install-streaming.sh").read_text()
@@ -107,6 +108,7 @@ class ProvisioningTests(unittest.TestCase):
         self.assertIn("Rivendell.SERVICES", script)
         self.assertIn("--skip-dependencies", script)
         self.assertIn('bash "$ROOT/tools/install-control-center.sh"', script)
+        self.assertIn('"$ROOT/tools/install-control-center.sh" --no-packages', script)
         self.assertNotIn('dpkg-buildpackage', script)
         self.assertNotIn('apt-get install', script)
         self.assertNotIn('mariadb -e', script)

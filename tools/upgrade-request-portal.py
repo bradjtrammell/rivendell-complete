@@ -67,7 +67,8 @@ def update(path: Path = UNIT) -> bool:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(0 if update() or True else 0)
+        update()
+        raise SystemExit(0)
     except (ValueError, OSError, UnicodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)

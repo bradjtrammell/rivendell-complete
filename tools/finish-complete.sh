@@ -144,9 +144,19 @@ for unit in rdcomplete-stream.service rdcomplete-jack-route.service; do
   [[ -f "$HOME/.config/systemd/user/$unit" ]] || fail "Missing user service file: $unit"
 done
 say "Installing native Rivendell Complete operator console"
-bash "$ROOT/tools/install-control-center.sh" ||
-  fail "Native operator console installation failed; existing station and database preserved"
-command -v rdcomplete-control >/dev/null ||
-  fail "Control Center launcher missing after installation"
+if (( SKIP_PACKAGES == 1 )); then
+  if /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null &&
+     command -v pkexec >/dev/null; then
+    bash "$ROOT/tools/install-control-center.sh" --no-packages ||
+      fail "Native console staging failed; package manager remained untouched"
+  else
+    say "GUI runtime unavailable; --no-packages preserves APT and skips new console"
+  fi
+else
+  bash "$ROOT/tools/install-control-center.sh" ||
+    fail "Native operator console installation failed; existing station and database preserved"
+  command -v rdcomplete-control >/dev/null ||
+    fail "Control Center launcher missing after installation"
+fi
 say "COMPONENT STAGING FINISHED. No broadcast services, NAS sources, clocks, or remote streams were activated."
 say "External NAS address, station service/groups, stream server and source credentials still require actual station configuration."

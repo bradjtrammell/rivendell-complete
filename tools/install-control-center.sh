@@ -2,6 +2,18 @@
 # Install the Rivendell Complete native operator console and root-owned NAS helper.
 set -Eeuo pipefail
 umask 077
+SKIP_PACKAGES=0
+if (( $# > 0 )); then
+  if (( $# == 1 )) && [[ "$1" == --no-packages ]]; then
+    SKIP_PACKAGES=1
+  elif (( $# == 1 )) && [[ "$1" == --help ]]; then
+    echo 'Usage: bash tools/install-control-center.sh [--no-packages]'
+    exit 0
+  else
+    echo 'ERROR: Unexpected operator console installer options' >&2
+    exit 2
+  fi
+fi
 fail() { printf 'Rivendell Complete console: ERROR: %s\n' "$*" >&2; exit 1; }
 (( EUID != 0 )) || fail 'Run as the desktop user'
 source /etc/os-release
@@ -13,6 +25,9 @@ for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas
 done
 if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null ||
    ! command -v pkexec >/dev/null; then
+  if (( SKIP_PACKAGES == 1 )); then
+    fail 'Qt or pkexec missing: --no-packages forbids installing the GUI runtime'
+  fi
   echo 'Installing the native Qt GUI runtime from Ubuntu 26.04 repositories'
   sudo -v
   sudo env DEBIAN_FRONTEND=noninteractive apt-get \
