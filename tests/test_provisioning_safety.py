@@ -60,6 +60,17 @@ class ProvisioningTests(unittest.TestCase):
         deployer = (ROOT / "tools" / "deploy-test-system.sh").read_text()
         self.assertIn("bash tools/install-station-utilities.sh", deployer)
 
+    def test_streaming_package_lock_wait_is_non_destructive(self):
+        script = (ROOT / "tools" / "install-streaming.sh").read_text()
+        self.assertIn("DPkg::Lock::Timeout=300", script)
+        self.assertIn("DEBIAN_FRONTEND=noninteractive", script)
+        self.assertIn("glasscoder jack-tools jackd2", script)
+        self.assertNotIn("apt-get update", script.split("sudo -v", 1)[1])
+        self.assertNotIn("rm -f /var/lib/dpkg/lock", script)
+        self.assertNotIn("kill -9", script)
+        self.assertIn("if systemctl --user daemon-reload; then", script)
+        self.assertIn("User systemd manager unavailable", script)
+
     def test_package_resume_and_reauth(self):
         installer = (ROOT / "tools" / "install-ubuntu26.sh").read_text()
         deployer = (ROOT / "tools" / "deploy-test-system.sh").read_text()

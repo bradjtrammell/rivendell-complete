@@ -92,7 +92,10 @@ unchanged. Unexpected or inconsistent partial states are explicitly refused
 without deleting or overwriting configuration or database records.
 
 The installer runs directly in the current SSH shell, without a detached
-session or terminal multiplexer. It prompts for sudo, reuses existing native
+session or terminal multiplexer. The streaming dependency installer waits up to
+300 seconds for another APT/dpkg transaction instead of deleting lock files
+or interrupting an Ubuntu update. The user service files are staged even when
+an SSH-only session cannot contact the per-user systemd manager. It prompts for sudo, reuses existing native
 packages when available (or builds from source), configures local MariaDB,
 and stages streaming tools and user units without activating a live stream.
 It also installs the implemented catalog, scheduler, request, live-request,
