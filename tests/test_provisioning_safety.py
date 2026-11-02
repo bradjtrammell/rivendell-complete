@@ -53,6 +53,14 @@ class ProvisioningTests(unittest.TestCase):
         for marker in ("--install-existing", "REUSE_PACKAGES=1", "sudo -v || fail", "sudo -n apt-get -s install"):
             self.assertIn(marker, installer)
         self.assertIn("--install-existing", deployer)
+        self.assertIn("RESUME_STAGED=1", installer)
+        self.assertIn("table_count == 0", installer)
+        self.assertIn("rdcomplete-first-install", installer)
+        self.assertIn("preserving both and skipping reinstallation", installer)
+        self.assertIn("Unrecognized partial Rivendell installation", installer)
+        self.assertNotIn("Existing Rivendell configuration found", installer)
+        one_shot = (ROOT / "tools" / "one-shot-install.sh").read_text()
+        self.assertNotIn("Rivendell configuration exists. Refusing", one_shot)
         self.assertIn('test -z "$(DESTDIR)"', systemd)
 
     def test_safe_deployer_default(self):

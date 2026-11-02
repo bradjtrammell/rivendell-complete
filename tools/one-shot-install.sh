@@ -70,14 +70,9 @@ fi
 git merge --ff-only origin/dev
 say "Revision: $(git rev-parse --short HEAD)"
 
-# Guarded fresh install only; existing configuration/database is never wiped.
-if [[ -e /etc/rd.conf || -e /etc/rivendell.d/rd-default.conf ]]; then
-  fail 'Rivendell configuration exists. Refusing an unsafe reinstallation.'
-fi
-if dpkg-query -W -f='${Status}' rivendell 2>/dev/null | grep -qx 'install ok installed'; then
-  fail 'Rivendell already installed. Refusing to overwrite.'
-fi
-
+# Installation-state classification is performed by install-ubuntu26.sh:
+# verified complete stations are kept, and only clearly marked interrupted
+# first installs may be resumed. Unknown configurations are never overwritten.
 if [[ -f "$ROOT/../rivendell_4.5.0-1_amd64.deb" && -f "$ROOT/../rivendell-webapi_4.5.0-1_amd64.deb" ]]; then
   say 'Compiled .deb files found; continuing installation without recompiling.'
   bash tools/deploy-test-system.sh --install-existing --streaming --jobs 2

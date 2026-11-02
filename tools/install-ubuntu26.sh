@@ -37,10 +37,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 [[ "$(cat "$ROOT/versions/PACKAGE_VERSION")" == 4.5.0 ]] || fail 'Expected Rivendell 4.5.0 source'
 [[ "$ROOT" != / ]] || fail 'Unsafe source directory'
 if [[ "$MODE" == install ]]; then
-  [[ ! -e /etc/rd.conf && ! -e /etc/rivendell.d/rd-default.conf ]] || fail 'Existing Rivendell configuration found'
-  if dpkg -s rivendell 2>/dev/null | grep -q '^Status: install ok installed'; then fail 'Already installed'; fi
   if mountpoint -q /var/snd; then fail '/var/snd is mounted; never point it at an existing music library'; fi
-  [[ ! -e /var/snd || -z "$(find /var/snd -mindepth 1 -maxdepth 1 -print -quit)" ]] || fail '/var/snd already has data'
+  # A failed package installation may already have created /etc/rd.conf.
+  # Keep it untouched until the recovery-state check below can inspect it.
+  if [[ ! -e /etc/rd.conf && ! -L /etc/rd.conf &&
+        ! -e /etc/rivendell.d/rd-default.conf ]]; then
+    [[ ! -e /var/snd || -z "$(find /var/snd -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+      fail '/var/snd already has data; refusing fresh installation'
+  fi
 fi
 if (( REUSE_PACKAGES == 0 )); then
   FREE_KB="$(df -Pk "$ROOT" | awk 'END {print $4}')"
@@ -112,6 +116,55 @@ fi
 log 'Reauthenticating sudo before package installation; long builds expire sudo timestamps'
 sudo -v || fail 'sudo authentication failed; compiled .deb files remain intact'
 
+# Classify previous installation state WITHOUT changing existing files.
+# A fresh install has no configuration, database or installed packages.
+# A resumable install must have OUR marker, OUR exact config symlink and
+# an existing but EMPTY schema, so postinst --create cannot overwrite tables.
+# A complete install must have the expected packages and nonempty schema.
+# Any other state is deliberately left untouched for manual inspection.
+RESUME_STAGED=0
+if [[ "$MODE" == install ]]; then
+  rd_conf=/etc/rd.conf
+  rd_default=/etc/rivendell.d/rd-default.conf
+  rd_marker=/etc/rivendell.d/rdcomplete-first-install
+  has_conf=0
+  [[ -e "$rd_conf" || -L "$rd_conf" || -e "$rd_default" ]] && has_conf=1
+  pkg_ready=0
+  web_ready=0
+  [[ "$(dpkg-query -W -f='${Status} ${Version}' rivendell 2>/dev/null || :)" == "install ok installed 4.5.0-1" ]] && pkg_ready=1
+  [[ "$(dpkg-query -W -f='${Status} ${Version}' rivendell-webapi 2>/dev/null || :)" == "install ok installed 4.5.0-1" ]] && web_ready=1
+
+  if (( has_conf == 1 )); then
+    [[ -L "$rd_conf" && "$(readlink "$rd_conf")" == "$rd_default" &&
+       -f "$rd_default" ]] ||
+      fail 'Unrecognized existing Rivendell config; no files changed. Check /etc/rd.conf and /etc/rivendell.d.'
+    [[ "$(sudo -n stat -c '%a' "$rd_default")" == 640 ]] ||
+      fail 'Existing Rivendell configuration has unexpected permissions; no files changed'
+    [[ "$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'" 2>/dev/null || :)" == 1 ]] ||
+      fail 'Configuration exists but the local Rivendell database is missing or inaccessible; no files changed'
+    table_count="$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Rivendell'")" ||
+      fail 'Cannot inspect existing Rivendell database tables; no files changed'
+    [[ "$table_count" =~ ^[0-9]+$ ]] || fail 'Unexpected schema table count; no files changed'
+
+    if (( pkg_ready == 1 && web_ready == 1 )) && (( table_count > 0 )) &&
+       [[ ! -e "$rd_marker" ]]; then
+      log 'Rivendell and the database are already installed; preserving both and skipping reinstallation'
+      exit 0
+    fi
+    if [[ -f "$rd_marker" ]] && (( table_count == 0 )) &&
+       (( pkg_ready == 0 )); then
+      RESUME_STAGED=1
+      log 'Verified interrupted first install: matching config, empty database, and first-install marker'
+    else
+      fail 'Unrecognized partial Rivendell installation; preserving configuration and database for inspection'
+    fi
+  elif (( pkg_ready == 1 || web_ready == 1 )); then
+    fail 'Rivendell package is installed without its expected configuration; no files changed'
+  elif [[ "$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'" 2>/dev/null || echo 0)" != 0 ]]; then
+    fail 'Existing Rivendell schema detected without configuration; no files changed'
+  fi
+fi
+
 # Validate the COMPLETE package transaction BEFORE creating users, databases
 # or configuration. A dependency failure must not leave a partial station.
 PLAN="$(sudo -n apt-get -s install "$PKG_WEB" "$PKG")" ||
@@ -119,6 +172,16 @@ PLAN="$(sudo -n apt-get -s install "$PKG_WEB" "$PKG")" ||
 if grep -q '^Remv ' <<<"$PLAN"; then
   printf '%s\n' "$PLAN" >&2
   fail 'Refusing package removal during station initialization'
+fi
+
+if (( RESUME_STAGED == 1 )); then
+  log 'Preserving staged database and credentials; resuming only the pending Debian package transaction'
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$PKG_WEB" "$PKG"
+  for exe in rdadmin rdairplay rdlibrary rdlogmanager rdimport rddbmgr; do
+    command -v "$exe" >/dev/null || fail "Installed executable missing: $exe"
+  done
+  log 'Interrupted Rivendell installation resumed; schema and service created by package postinst'
+  exit 0
 fi
 
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mariadb-server

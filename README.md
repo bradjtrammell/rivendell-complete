@@ -85,6 +85,11 @@ cd ~/rivendell-complete && git fetch origin dev && git switch dev && git merge -
 
 If sudo expires after native compilation, rerun the command to reuse the
 already compiled packages and resume installation without rebuilding them.
+The installer also recognizes a previously interrupted database-initialization
+stage only when its own first-install marker exists, the expected configuration
+is present, and the database has zero tables. Fully installed stations are left
+unchanged. Unexpected or inconsistent partial states are explicitly refused
+without deleting or overwriting configuration or database records.
 
 The installer runs directly in the current SSH shell, without a detached
 session or terminal multiplexer. It prompts for sudo, reuses existing native
