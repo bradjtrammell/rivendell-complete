@@ -118,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_argument("--source", required=True)
     commands.add_parser("configure-external")
     commands.add_parser("export-catalog")
+    commands.add_parser("restart-audio")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
@@ -152,6 +153,18 @@ def main(argv: list[str] | None = None) -> int:
         configure_external()
     elif args.action == "configure-external":
         configure_external()
+    elif args.action == "restart-audio":
+        if subprocess.run(
+            ["/usr/bin/pgrep", "-x", "rdairplay"], check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ).returncode == 0:
+            raise CommissionError("Stop RDAirPlay before restarting the audio daemon")
+        verify_mount()
+        subprocess.run(["/usr/bin/systemctl", "restart", "rivendell"],
+                       check=True, timeout=40)
+        subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", "rivendell"],
+                       check=True, timeout=15)
+        print("Rivendell audio daemon restarted with the NAS configuration")
     elif args.action == "export-catalog":
         script = HERE / "rdcatalog.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:

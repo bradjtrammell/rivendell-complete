@@ -114,6 +114,7 @@ class Console(QMainWindow):
         self.command = None
         self.mode = ""
         self.output = bytearray()
+        self.errors = bytearray()
         self.smb_secret: bytes | None = None
         self.buttons: list[QPushButton] = []
         self.request_ids: list[int] = []
@@ -207,6 +208,7 @@ class Console(QMainWindow):
         page.add(box)
         page.add(note("A system authentication dialog will ask permission to mount the NAS. SMB credentials are never included in command arguments or displayed in activity logs."))
         page.add(self.register(push("Connect and configure source", self.mount_nas)))
+        page.add(self.register(push("Apply configuration to audio daemon", self.restart_daemon, True)))
         page.add(note("If the share is already mounted read-only at /mnt/radio-music, existing settings are preserved. Different mounts must be reviewed manually."))
         page.finish()
         self.pages.addWidget(page)
@@ -360,14 +362,16 @@ class Console(QMainWindow):
         self.busy = True
         self.mode = mode
         self.output = bytearray()
+        self.errors = bytearray()
         self.smb_secret = data
         for button in self.buttons:
             button.setEnabled(False)
         self.progress.show()
         self.status.setText(f"Running: {mode}. Do not close the application.")
         self.command = QProcess(self)
-        self.command.setProcessChannelMode(QProcess.MergedChannels)
+        self.command.setProcessChannelMode(QProcess.SeparateChannels)
         self.command.readyReadStandardOutput.connect(self._read_output)
+        self.command.readyReadStandardError.connect(self._read_error)
         self.command.started.connect(self._send_stdin)
         self.command.finished.connect(self._finished)
         self.command.errorOccurred.connect(self._error)
@@ -405,6 +409,20 @@ class Console(QMainWindow):
             else:
                 self.status.setText(line.strip()[-250:] or f"Running: {self.mode}")
 
+    def _read_error(self):
+        if self.command is None:
+            return
+        chunk = bytes(self.command.readAllStandardError())
+        if len(self.errors) < 1024 * 1024:
+            self.errors.extend(chunk[:1024 * 1024 - len(self.errors)])
+        if self.mode != "catalog":
+            line = chunk.decode("utf-8", "replace")
+            if self.mode in ("scan", "import"):
+                self.import_output.insertPlainText(line)
+                self.import_output.ensureCursorVisible()
+            else:
+                self.status.setText(line.strip()[-250:] or f"Running: {self.mode}")
+
     def _error(self, failure):
         if failure == QProcess.FailedToStart:
             self._alert("Could not start the required program. Check its installation and desktop authentication agent.")
@@ -416,6 +434,7 @@ class Console(QMainWindow):
 
     def _finished(self, code: int, status):
         self._read_output()
+        self._read_error()
         mode = self.mode
         good = code == 0 and status == QProcess.NormalExit
         self.busy = False
@@ -438,8 +457,8 @@ class Console(QMainWindow):
                 self.health.setPlainText(summary)
             except (ValueError, KeyError, TypeError):
                 pass
-        if mode in ("mount", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog") and not good:
-            details = bytes(self.output).decode("utf-8", "replace")[-1700:]
+        if mode in ("mount", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
+            details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
         if mode == "import" and good:
             QMessageBox.information(self, "Music import completed",
@@ -447,6 +466,7 @@ class Console(QMainWindow):
         self.command.deleteLater()
         self.command = None
         self.output = bytearray()
+        self.errors = bytearray()
 
     def readiness(self):
         self.health.clear()
@@ -474,6 +494,13 @@ class Console(QMainWindow):
             return
         self.nas_password.clear()
         self._root("mount-smb" if smb else "mount-nfs", ["--source", src], creds, "mount")
+
+    def restart_daemon(self):
+        if not self._confirm("Restart Rivendell audio services",
+                "Apply the NAS configuration by restarting the Rivendell service?\n\n"
+                "RDAirPlay must be stopped, and any live playback would be interrupted."):
+            return
+        self._root("restart-audio", mode="restart-audio")
 
     def scan_import(self):
         self.import_output.clear()

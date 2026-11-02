@@ -67,6 +67,8 @@ class ControlCenterSafety(unittest.TestCase):
     def test_controls_never_auto_start_broadcast(self):
         source = (ROOT / "tools" / "rdcomplete_control.py").read_text()
         self.assertIn("QProcess", source)
+        self.assertIn("SeparateChannels", source)
+        self.assertIn("restart-audio", source)
         self.assertIn("QMessageBox.question", source)
         self.assertIn('ROOT_HELPER = "/usr/local/libexec/rivendell-complete/rdcomplete_root.py"', source)
         self.assertIn("self._confirm(", source)
