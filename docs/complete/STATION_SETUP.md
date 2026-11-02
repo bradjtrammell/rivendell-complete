@@ -19,7 +19,7 @@ sudo apt-get install -y git
 git clone --branch dev \
   https://github.com/bradjtrammell/rivendell-complete.git
 cd rivendell-complete
-bash tools/install-ubuntu26.sh --build-only
+bash tools/deploy-test-system.sh --build-only
 ```
 
 The command compiles native packages. Review its output and ensure Ubuntu 26
@@ -27,7 +27,7 @@ CI completed successfully before proceeding. The full fresh installation path
 is:
 
 ```bash
-bash tools/install-ubuntu26.sh --install
+bash tools/deploy-test-system.sh --install
 ```
 
 The second command **builds again** and installs a local database and

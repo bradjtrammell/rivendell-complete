@@ -82,10 +82,10 @@ sudo apt-get install -y git
 git clone --branch dev \
   https://github.com/bradjtrammell/rivendell-complete.git
 cd rivendell-complete
-bash tools/install-ubuntu26.sh --build-only
+bash tools/deploy-test-system.sh --build-only
 ```
 
-This mode prepares dependencies and attempts to build native packages. **It does not install a working, configured station.** The Ubuntu 26.04 build path has encountered real dependency, C++ and Debian packaging failures. Changes have been committed for those failures, but complete packaging and hardware verification must pass before an installation is recommended.
+The build mode runs local regression checks and attempts native compilation. To install on a fresh test workstation, run `bash tools/deploy-test-system.sh --install`. Optional `--nfs` or `--smb` mounts original music read-only. `--streaming` installs (but never activates) an encoder; `--request-group` installs (but never activates) the loopback request service. **The resulting test installation must still be commissioned and air-qualified.** The Ubuntu 26.04 build path has encountered real dependency, C++ and Debian packaging failures. Changes have been committed for those failures, but complete packaging and hardware verification must pass before an installation is recommended.
 
 For commissioning details, see the [station setup guide](docs/complete/STATION_SETUP.md). **Do not use the experimental `--install` mode for a station carrying live programming yet.**
 
