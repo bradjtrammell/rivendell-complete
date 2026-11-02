@@ -304,7 +304,7 @@ class Console(QMainWindow):
         page = Panel("Audio routing",
             "Discover the actual JACK ports before connecting Rivendell outputs to the encoder inputs. Routing controls do not start or replace RDAirPlay.")
         page.add(self.register(push("Discover live JACK ports", lambda: self.execute(
-            ["rdcomplete-jack-route", "--discover"], "audio-discover")))
+            ["rdcomplete-jack-route", "--discover"], "audio-discover"))))
         self.port_output = QPlainTextEdit()
         self.port_output.setReadOnly(True)
         self.port_output.setFont(QFont("DejaVu Sans Mono", 10))
@@ -328,7 +328,7 @@ class Console(QMainWindow):
         page = Panel("Production scheduling",
             "Protect the existing Production service and schedule. Inspect the generated commands before enabling the recurring timer.")
         page.add(self.register(push("Preview next seven days", lambda: self.execute(
-            ["rdcomplete-loggen", "--service", SERVICE, "--days", "7", "--dry-run"], "schedule-preview")))
+            ["rdcomplete-loggen", "--service", SERVICE, "--days", "7", "--dry-run"], "schedule-preview"))))
         page.add(self.register(push("Enable future log timer", self.enable_schedule, True)))
         page.add(note("Enabling scheduling requires configured grids, clocks, legal IDs and playable carts in RDLogManager. This tool is not continuous live backtiming."))
         page.add(self.register(push("Open RDLogManager", lambda: self.launch("rdlogmanager"), True)))
