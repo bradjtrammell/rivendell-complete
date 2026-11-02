@@ -110,6 +110,31 @@ installation or database.
 have not passed qualification. A build/install error is possible; consult the
 log rather than wiping the test workstation.
 
+### Complete currently available station components after native installation
+
+For an existing 4.5.0-1 Ubuntu 26.04 machine, run this **foreground** command
+as the normal desktop user to stage the actual implemented components without
+rebuilding Rivendell or resetting the database:
+
+```bash
+cd ~/rivendell-complete && git fetch origin dev && git switch dev && git merge --ff-only origin/dev && bash tools/finish-complete.sh
+```
+
+The completion command installs available command-line catalog, offline clock,
+request and diagnostics tools, plus missing user desktop shortcuts for existing
+Rivendell applications, before attempting GlassCoder/JACK installation. If APT
+is locked by another process it leaves that transaction alone and exits with
+status 2; already-staged utilities remain intact. Use `--no-packages` to stage
+only user tools while investigating the unrelated package manager.
+
+When a real service and music group already exist in the Rivendell database,
+the optional `--service EXISTING_SERVICE --request-group EXISTING_GROUP`
+arguments stage (but do not enable) the log-generation timer and protected
+loopback listener-request API. The names must be those actually configured in
+RDAdmin. Public listener requests, stream credentials, NAS mount paths, audio
+routing, live scheduling and GUI integration still require commissioning or
+additional engineering; **this command is not a complete 5.0 release**.
+
 ### Developer build (not a station installation)
 
 ```bash

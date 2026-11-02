@@ -106,6 +106,15 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
 4. Avoid telling operators to rerun installation repeatedly on guesses. An updated build command is justified only when the exact failing revision has successful independent verification at the corresponding gate.
 5. Native Ubuntu 26.04 Debian package build failed on November 2 with `cannot parse ../../helpers/docbook/template/titlepage.xsl`. Packaging did not export `DOCBOOK_STYLESHEETS`, so `helpers/docbook` was never created by configure. Debian packaging rules now export the distro stylesheet location and fail early if it is absent. **CI package build and fresh-host installation must still be rerun; this change alone does not qualify deployment.**
 
+6. Native 4.5.0-1 packages and both desktop executables were observed installed
+   on the user's November 2 workstation, with an existing MariaDB schema.
+   This does **not** verify all GUI applications or any on-air feature.
+7. Stream staging encountered an unrelated APT frontend lock held by PID 6507
+   across multiple attempts. Preserve the lock and live package transaction;
+   do not terminate it or declare its owner stale without process diagnostics.
+   The post-install component command now stages independent tools and desktop
+   shortcuts before checking APT contention.
+
 ## Implementation references
 
 - [Ubuntu 26.04 commissioning](STATION_SETUP.md)

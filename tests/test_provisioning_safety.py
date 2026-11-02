@@ -6,7 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ("setup-nas.sh", "install-ubuntu26.sh", "install-streaming.sh",
          "install-requests.sh", "install-loggen.sh", "deploy-test-system.sh", "one-shot-install.sh",
-         "install-station-utilities.sh")
+         "install-station-utilities.sh", "finish-complete.sh")
 
 
 class ProvisioningTests(unittest.TestCase):
@@ -87,6 +87,22 @@ class ProvisioningTests(unittest.TestCase):
         one_shot = (ROOT / "tools" / "one-shot-install.sh").read_text()
         self.assertNotIn("Rivendell configuration exists. Refusing", one_shot)
         self.assertIn('test -z "$(DESTDIR)"', systemd)
+
+    def test_finish_staging_does_not_rebuild_or_overwrite_data(self):
+        script = (ROOT / "tools" / "finish-complete.sh").read_text()
+        self.assertIn('bash "$ROOT/tools/install-station-utilities.sh"', script)
+        self.assertIn('bash "$ROOT/tools/install-streaming.sh"', script)
+        self.assertIn('bash "$ROOT/tools/install-requests.sh"', script)
+        self.assertIn('bash "$ROOT/tools/install-loggen.sh"', script)
+        self.assertIn('install -m 0644 "$source_path"', script)
+        self.assertIn('fuser -s /var/lib/dpkg/lock-frontend', script)
+        self.assertIn('--no-packages', script)
+        self.assertNotIn('dpkg-buildpackage', script)
+        self.assertNotIn('apt-get install', script)
+        self.assertNotIn('mariadb -e', script)
+        self.assertNotIn('systemctl enable', script)
+        self.assertNotIn('tmux', script)
+        self.assertNotIn('rm -rf', script)
 
     def test_safe_deployer_default(self):
         s = (ROOT / "tools/deploy-test-system.sh").read_text()

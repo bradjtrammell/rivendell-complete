@@ -161,6 +161,29 @@ Passwords are prompted and stored at mode 0600, never placed in process
 arguments. JACK/ALSA source routing and server handshakes are *not*
 automatically established by this stage and must be tested with real hardware.
 
+## User-component completion on an already installed workstation
+
+Do not rebuild native Rivendell merely to install the existing command-line
+extensions. As the desktop user, on the development checkout:
+
+```bash
+bash tools/finish-complete.sh
+```
+
+This stages actual catalog, offline schedules, request processing, live-request
+dispatcher and station diagnostics as `~/.local/bin/rdcomplete-*`, plus desktop
+launchers for installed Rivendell programs. If GlassCoder/JACK are not already
+installed, it attempts to install those packages without deleting APT locks
+or killing their current holder. For a locked package manager, the command
+exits status 2 after staging the independent utilities; inspect the holder
+before retrying.
+
+The optional `--no-packages` stages just user utilities. `--service
+EXISTING_SERVICE` and `--request-group EXISTING_GROUP` stage disabled
+scheduled log generation and listener-request services only after those names
+have been created in RDAdmin. The installer does not invent station names,
+NAS addresses, or stream destinations, and does not activate broadcast output.
+
 ## Broadcast qualification still required
 
 - Pass native Ubuntu 26.04 build and install; launch RDAdmin, RDLibrary,
