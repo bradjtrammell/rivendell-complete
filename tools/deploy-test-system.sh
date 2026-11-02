@@ -13,6 +13,7 @@ Usage: bash tools/deploy-test-system.sh [--check-only|--build-only|--install]
 Default --check-only: static checks and Python regression suite; no system changes.
 --build-only: checks plus native Ubuntu 26.04 package build; no installation.
 --install: checks, build, guarded fresh installation and optional components.
+--nfs / --smb mounts an existing NAS source strictly read-only (never copies files).
 --streaming installs encoder tools but DOES NOT start or configure an outgoing feed.
 --request-group installs private request service but DOES NOT enable the service.
 An installed test station is NOT broadcast-qualified. Configure RDAdmin, clocks,
