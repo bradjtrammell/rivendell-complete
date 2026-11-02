@@ -94,7 +94,9 @@ without deleting or overwriting configuration or database records.
 The installer runs directly in the current SSH shell, without a detached
 session or terminal multiplexer. It prompts for sudo, reuses existing native
 packages when available (or builds from source), configures local MariaDB,
-and installs (but does not activate) the streaming encoder.
+and stages streaming tools and user units without activating a live stream.
+Development regression tests (including network/socket tests) run only in
+explicit check-only mode, never in installation mode.
 It saves a private log under `~/rivendell-install-logs/`; keep SSH connected
 through installation. It refuses to overwrite an existing Rivendell
 installation or database.

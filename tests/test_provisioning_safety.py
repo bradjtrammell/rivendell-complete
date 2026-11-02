@@ -45,6 +45,8 @@ class ProvisioningTests(unittest.TestCase):
         self.assertNotIn("tmux", s)
         self.assertNotIn("nohup", s)
         self.assertIn("--install-existing --streaming --jobs 2", s)
+        self.assertIn("rdcomplete-jack-route", s)
+        self.assertIn("rdlogmanager rdlogedit rdpanel", s)
 
     def test_package_resume_and_reauth(self):
         installer = (ROOT / "tools" / "install-ubuntu26.sh").read_text()
@@ -67,6 +69,11 @@ class ProvisioningTests(unittest.TestCase):
         s = (ROOT / "tools/deploy-test-system.sh").read_text()
         self.assertIn("mode=check", s)
         self.assertIn("python3 -m unittest discover", s)
+        self.assertIn('if [[ "$mode" == check ]]; then', s)
+        test_line = s.index("python3 -m unittest discover")
+        check_line = s.index('if [[ "$mode" == check ]]; then')
+        self.assertGreater(test_line, check_line)
+        self.assertIn("skipping development tests during installation", s)
         self.assertIn("NOT air-qualified", s)
 
 

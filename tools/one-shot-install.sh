@@ -45,7 +45,7 @@ on_exit() {
   local rc=$?
   trap - EXIT
   if ((rc == 0)); then
-    say 'INSTALLATION COMPLETED; station setup and on-air verification still required.'
+    say 'INSTALLATION STAGING COMPLETED; on-air commissioning and feature verification still required.'
   else
     say "INSTALLATION FAILED (exit $rc). No automatic cleanup or destructive reset was performed."
   fi
@@ -74,18 +74,30 @@ say "Revision: $(git rev-parse --short HEAD)"
 # verified complete stations are kept, and only clearly marked interrupted
 # first installs may be resumed. Unknown configurations are never overwritten.
 if [[ -f "$ROOT/../rivendell_4.5.0-1_amd64.deb" && -f "$ROOT/../rivendell-webapi_4.5.0-1_amd64.deb" ]]; then
-  say 'Compiled .deb files found; continuing installation without recompiling.'
-  bash tools/deploy-test-system.sh --install-existing --streaming --jobs 2
+  say 'Compiled .deb files found; completing user tools without recompiling.'
+  if ! bash tools/deploy-test-system.sh --install-existing --streaming --jobs 2; then
+    fail 'Installation staging failed; see the first error above. Existing database and packages preserved.'
+  fi
 else
-  say 'Building native Rivendell packages, then installing.'
-  bash tools/deploy-test-system.sh --install --streaming --jobs 2
+  say 'Building native Rivendell packages, then installing and staging user tools.'
+  if ! bash tools/deploy-test-system.sh --install --streaming --jobs 2; then
+    fail 'Installation failed; existing database and packages preserved.'
+  fi
 fi
 
 say 'Verifying native packages and programs'
 dpkg-query -W rivendell rivendell-webapi
-for app in rdadmin rdairplay rdlibrary rdlogmanager rddbmgr; do
+for app in rdadmin rdairplay rdlibrary rdlogmanager rdlogedit rdpanel rdcatch rdcastmanager rddbmgr; do
   command -v "$app" || fail "Missing installed application: $app"
 done
-say 'Service state:'
-systemctl --no-pager --full status mariadb rivendell || true
-say 'Open RDAdmin on the graphical Ubuntu desktop after logging out and back in.'
+for tool in rdcomplete-stream rdcomplete-metadata rdcomplete-jack-route; do
+  [[ -x "$HOME/.local/bin/$tool" ]] || fail "Missing staged station component: $tool"
+  say "Staged tool: $HOME/.local/bin/$tool"
+done
+for unit in rdcomplete-stream.service rdcomplete-jack-route.service; do
+  [[ -f "$HOME/.config/systemd/user/$unit" ]] || fail "Missing staged station unit: $unit"
+done
+say 'Services (informational; not a station readiness test):'
+systemctl is-active mariadb rivendell || true
+say 'Base applications and streaming utilities staged. Music library, station service, routes, credentials and scheduling still require commissioning.'
+say 'Log out and back in before launching RDAdmin in the Ubuntu desktop.'

@@ -105,9 +105,9 @@ def approved_requests(database: Path | None, eligible: set[int]) -> list[dict]:
 def _choose_song(pools: dict[str, list[Track]], cfg: dict, requests: list[dict],
                  used_requests: set[int], now: int, budget: int,
                  last: dict, rng: random.Random, rotation: list[str],
-                 pos: list[int], requests_this_hour: int) -> tuple[Track | None, int | None]:
+                 pos: list[int], requests_this_hour: int,
+                 by_cart: dict[int, Track]) -> tuple[Track | None, int | None]:
     if requests_this_hour < cfg.get("max_requests_per_hour", 2):
-        by_cart = {t.cart: t for group in pools.values() for t in group}
         for row in requests:
             if row["id"] in used_requests:
                 continue
@@ -175,7 +175,8 @@ def assemble(catalog: list[Track], cfg: dict, day: date,
                 if n > 100:
                     raise PlanError("Excessive music events: possible zero-duration loop")
                 track, rid = _choose_song(pools,cfg,requests,ids,now,available,
-                                          history,rng,cfg["rotation"],pos,requests_this_hour)
+                                          history,rng,cfg["rotation"],pos,requests_this_hour,
+                                          by_cart)
                 if track is None:
                     break
                 results.append(Event(track.cart,now,track.length_ms,

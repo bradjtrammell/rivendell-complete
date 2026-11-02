@@ -6,11 +6,12 @@ fail(){ printf 'Rivendell Complete deployment: %s\n' "$*" >&2; exit 1; }
 log(){ printf 'Rivendell Complete deployment: %s\n' "$*"; }
 usage(){
   cat <<'HELP'
-Usage: bash tools/deploy-test-system.sh [--check-only|--build-only|--install]
+Usage: bash tools/deploy-test-system.sh [--check-only|--build-only|--install|--install-existing]
   [--jobs 1..4] [--nfs HOST:/EXPORT | --smb //HOST/SHARE]
   [--streaming] [--request-group RD_GROUP]
 
 Default --check-only: static checks and Python regression suite; no system changes.
+Install modes run syntax/compile checks, NOT integration or UDP-port tests.
 --build-only: checks plus native Ubuntu 26.04 package build; no installation.
 --install-existing: install validated existing .deb archives without compilation.
 --install: checks, build, guarded fresh installation and optional components.
@@ -65,13 +66,13 @@ log 'Checking installer syntax and Python modules'
 bash -n tools/setup-nas.sh tools/install-ubuntu26.sh tools/install-streaming.sh \
   tools/install-requests.sh tools/install-loggen.sh tools/deploy-test-system.sh
 python3 -m compileall -q tools tests
-log 'Running repository regression suite'
-python3 -m unittest discover -s tests -p 'test_*.py' -v
-log 'Repository checks passed'
 if [[ "$mode" == check ]]; then
-  log 'Read-only check complete; no station installation performed'
+  log 'Running the development regression suite (check-only; never blocks an installed station)'
+  python3 -m unittest discover -s tests -p 'test_*.py' -v
+  log 'Repository tests passed; no station installation performed'
   exit 0
 fi
+log 'Installer syntax and Python bytecode checks passed; skipping development tests during installation'
 source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Ubuntu 26.04 required'
 [[ "$(dpkg --print-architecture)" == amd64 ]] || fail 'amd64 required'
