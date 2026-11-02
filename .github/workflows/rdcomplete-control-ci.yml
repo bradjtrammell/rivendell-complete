@@ -1,0 +1,58 @@
+name: Rivendell Complete Native Control Center
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "tools/rdcomplete_control.py"
+      - "tools/rdcomplete_root.py"
+      - "tools/install-control-center.sh"
+      - "tools/finish-complete.sh"
+      - "tools/setup-nas.sh"
+      - "tools/rdcatalog.py"
+      - "tools/rdexternal.py"
+      - "tests/test_control_center.py"
+      - ".github/workflows/rdcomplete-control-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  control-center:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Install headless Qt runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-pyqt5
+      - name: Static Python and shell checks
+        run: |
+          /usr/bin/python3 -m py_compile tools/rdcomplete_control.py tools/rdcomplete_root.py tools/rdexternal.py tools/rdcatalog.py
+          bash -n tools/install-control-center.sh tools/finish-complete.sh tools/setup-nas.sh
+      - name: Native control-center regression tests
+        run: |
+          /usr/bin/python3 -m unittest discover -s tests -p test_control_center.py -v
+      - name: Launch Qt widgets with offscreen display
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          /usr/bin/python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path("tools").resolve()))
+          from PyQt5.QtWidgets import QApplication
+          from PyQt5.QtCore import QTimer
+          from rdcomplete_control import Console
+          Console.readiness = lambda self: None  # No radio hardware in CI
+          app = QApplication([])
+          window = Console()
+          assert window.pages.count() == 7
+          assert window.menu.count() == 7
+          assert window.windowTitle().startswith("Rivendell Complete")
+          QTimer.singleShot(300, app.quit)
+          app.exec_()
+          print("Native Qt console: initialization passed")
+          PY
