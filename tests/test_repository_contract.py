@@ -53,6 +53,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("PKG_WEB=", installer)
         self.assertIn('apt-get install -y "$PKG_WEB" "$PKG"', installer)
         self.assertIn("binary: build", rules)
+        self.assertIn("DOCBOOK_STYLESHEETS := /usr/share/xml/docbook/stylesheet/docbook-xsl-ns", rules)
+        self.assertIn("export DOCBOOK_STYLESHEETS", rules)
+        self.assertIn('test -r "$(DOCBOOK_STYLESHEETS)/template/titlepage.xsl"', rules)
         self.assertIn("chmod 750 /etc/rivendell.d", postinst)
         self.assertIn("mountpoint -q /var/snd", installer)
 

@@ -104,6 +104,7 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
 2. Native build originally failed in the request-driven RDAirPlay C++ `PX` switch case. Scoping corrected; must rerun in native CI.
 3. After installing dependencies, the real workstation reached `dpkg-buildpackage --build=binary --no-sign` and failed at **`debian/rules:15`** because `librivwebcapi.so.*` had never been built. The `debian/rules.src` `binary` target now depends on `build`; *do not treat this as fixed until Debian package CI and the actual machine pass*.
 4. Avoid telling operators to rerun installation repeatedly on guesses. An updated build command is justified only when the exact failing revision has successful independent verification at the corresponding gate.
+5. Native Ubuntu 26.04 Debian package build failed on November 2 with `cannot parse ../../helpers/docbook/template/titlepage.xsl`. Packaging did not export `DOCBOOK_STYLESHEETS`, so `helpers/docbook` was never created by configure. Debian packaging rules now export the distro stylesheet location and fail early if it is absent. **CI package build and fresh-host installation must still be rerun; this change alone does not qualify deployment.**
 
 ## Implementation references
 

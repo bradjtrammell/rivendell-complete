@@ -1,6 +1,13 @@
 #!/usr/bin/make -f
 
+# Ubuntu 26.04: DocBook 5 stylesheets are supplied by docbook-xsl-ns.
+# Export to configure AND recursive make; otherwise helpers/docbook is absent,
+# causing docs/stylesheets/book-fo-titlepages.xsl to fail during packaging.
+DOCBOOK_STYLESHEETS := /usr/share/xml/docbook/stylesheet/docbook-xsl-ns
+export DOCBOOK_STYLESHEETS
+
 build:	
+	test -r "$(DOCBOOK_STYLESHEETS)/template/titlepage.xsl"
 	dh_update_autotools_config
 	dh_autoreconf
 	 ./configure --prefix=/usr --libdir=/usr/lib --libexecdir=/var/www/rd-bin --sysconfdir=/etc/apache2/conf-available MUSICBRAINZ_LIBS="-ldiscid -lmusicbrainz5cc -lcoverartcc"
