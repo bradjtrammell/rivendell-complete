@@ -2,6 +2,19 @@
 # Run as the DESKTOP STUDIO USER. Does not enable or start streaming.
 set -Eeuo pipefail
 umask 077
+SKIP_DEPENDENCIES=0
+if (( $# > 0 )); then
+  if [[ $# -eq 1 && "$1" == --skip-dependencies ]]; then
+    SKIP_DEPENDENCIES=1
+  elif [[ $# -eq 1 && "$1" == --help ]]; then
+    echo 'Usage: bash tools/install-streaming.sh [--skip-dependencies]'
+    echo 'Stage disabled user service files and stream binaries without apt if needed.'
+    exit 0
+  else
+    echo 'ERROR: Unexpected streaming installer arguments' >&2
+    exit 2
+  fi
+fi
 [[ $EUID -ne 0 ]] || { echo "Run as normal desktop user, not root" >&2; exit 1; }
 source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || { echo "Ubuntu 26.04 required" >&2; exit 1; }
@@ -10,19 +23,31 @@ here="$(cd "$(dirname "$0")" && pwd -P)"
   echo "Run from the checked-out Rivendell Complete source tree" >&2
   exit 1
 }
-# The core Ubuntu installer already refreshed APT metadata. Running a second
-# update here adds a separate lists lock and creates an avoidable race with
-# another desktop update. Let APT itself wait for the dpkg frontend lock.
-# Never remove lock files or terminate an unrelated package manager.
-sudo -v
-echo 'Installing GlassCoder/JACK; waiting up to 300 seconds for any active dpkg transaction'
-if ! sudo env DEBIAN_FRONTEND=noninteractive apt-get \
-    -o DPkg::Lock::Timeout=300 \
-    install -y --no-install-recommends glasscoder jack-tools jackd2; then
-  echo 'ERROR: GlassCoder/JACK package installation failed or package lock timed out.' >&2
-  echo 'Check any other apt process with: ps -eo pid,ppid,etime,stat,cmd | grep -E "[a]pt-get|[d]pkg|[u]nattended-upgrade"' >&2
-  echo 'The Rivendell database, compiled packages, and station configuration have not been removed.' >&2
-  exit 1
+if (( SKIP_DEPENDENCIES == 1 )); then
+  echo 'Skipping APT; streaming binaries and disabled service files will still be staged.'
+else
+  all_installed=1
+  for package in glasscoder jack-tools jackd2; do
+    [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || :)" == "install ok installed" ]] || all_installed=0
+  done
+  if (( all_installed == 1 )); then
+    echo 'GlassCoder/JACK dependencies already installed; no APT transaction needed.'
+  else
+    sudo -v
+    # The core Ubuntu installer already refreshed APT metadata. Running a second
+    # update here adds a separate lists lock and creates an avoidable race with
+    # another desktop update. Let APT itself wait for the dpkg frontend lock.
+    # Never remove lock files or terminate an unrelated package manager.
+    echo 'Installing GlassCoder/JACK; waiting up to 300 seconds for any active dpkg transaction'
+    if ! sudo env DEBIAN_FRONTEND=noninteractive apt-get \
+        -o DPkg::Lock::Timeout=300 \
+        install -y --no-install-recommends glasscoder jack-tools jackd2; then
+      echo 'ERROR: GlassCoder/JACK package installation failed or package lock timed out.' >&2
+      echo 'Check any other apt process with: ps -eo pid,ppid,etime,stat,cmd | grep -E "[a]pt-get|[d]pkg|[u]nattended-upgrade"' >&2
+      echo 'The Rivendell database, compiled packages, and station configuration have not been removed.' >&2
+      exit 1
+    fi
+  fi
 fi
 install -d -m 0700 "$HOME/.local/bin" "$HOME/.config/systemd/user"
 install -m 0755 "$here/rdstream.py" "$HOME/.local/bin/rdcomplete-stream"
@@ -39,7 +64,7 @@ else
   echo 'WARNING: User systemd manager unavailable in this SSH session.' >&2
   echo 'User unit files are staged; log into the Ubuntu desktop and run: systemctl --user daemon-reload' >&2
 fi
-echo "Encoder installed, NOT started."
+echo "Streaming files staged; outgoing feed remains disabled."
 echo "Configure: ~/.local/bin/rdcomplete-stream configure --server-type Shout2 --server-url http://HOST:PORT/ --username source"
 echo "Validate: ~/.local/bin/rdcomplete-stream verify"
 echo "Then: systemctl --user enable --now rdcomplete-stream.service"

@@ -122,7 +122,10 @@ cd ~/rivendell-complete && git fetch origin dev && git switch dev && git merge -
 
 The completion command installs available command-line catalog, offline clock,
 request and diagnostics tools, plus missing user desktop shortcuts for existing
-Rivendell applications, before attempting GlassCoder/JACK installation. If APT
+Rivendell applications, before attempting GlassCoder/JACK installation.
+The streaming scripts and disabled user service units are staged even if APT
+is locked. Already-installed GlassCoder/JACK packages do not trigger APT.
+Optional station group and service names are checked against the live database. If APT
 is locked by another process it leaves that transaction alone and exits with
 status 2; already-staged utilities remain intact. Use `--no-packages` to stage
 only user tools while investigating the unrelated package manager.

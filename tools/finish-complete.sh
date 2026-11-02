@@ -78,6 +78,20 @@ for name in rdadmin rdairplay rdlibrary rdlogmanager rdlogedit rdpanel rdcatch r
 done
 say "Staged $installed_launchers new desktop launchers; log out and back in to refresh the application menu"
 
+if [[ -n "$GROUP" || -n "$SERVICE" ]]; then
+  sudo -v
+  if [[ -n "$GROUP" ]]; then
+    found="$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM Rivendell.GROUPS WHERE NAME='$GROUP'" 2>/dev/null)" ||
+      fail "Cannot read Rivendell groups; no service settings changed"
+    [[ "$found" == 1 ]] || fail "Request group $GROUP does not exist in RDAdmin"
+  fi
+  if [[ -n "$SERVICE" ]]; then
+    found="$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM Rivendell.SERVICES WHERE NAME='$SERVICE'" 2>/dev/null)" ||
+      fail "Cannot read Rivendell services; no service settings changed"
+    [[ "$found" == 1 ]] || fail "Service $SERVICE does not exist in RDAdmin"
+  fi
+fi
+
 if [[ -n "$GROUP" ]]; then
   if [[ -e "$HOME/.config/rivendell-complete/request-listener.token" || -e "$HOME/.config/rivendell-complete/request-admin.token" || -e "$HOME/.config/systemd/user/rdcomplete-requests.service" ]]; then
     say "Request service already provisioned; preserving credentials and service; no overwrite"
@@ -98,7 +112,8 @@ else
 fi
 
 if (( SKIP_PACKAGES == 1 )); then
-  say "Skipping GlassCoder/JACK package changes as requested; this is user-tools-only staging"
+  say "Skipping APT as requested; staging stream scripts and disabled units"
+  bash "$ROOT/tools/install-streaming.sh" --skip-dependencies
 else
   deps_ready=1
   for package in glasscoder jack-tools jackd2; do
@@ -110,7 +125,8 @@ else
       sudo fuser -s /var/lib/dpkg/lock-frontend 2>/dev/null; then
     say "APT lock is held by another process. Leaving it alone; GlassCoder/JACK pending."
     say "Inspect with: ps -eo pid,ppid,etime,stat,args | grep -E '[a]pt-get|[d]pkg|[u]nattended-upgrade'"
-    say "All available user utilities and desktop launchers were staged before this blocker."
+    bash "$ROOT/tools/install-streaming.sh" --skip-dependencies
+    say "All available user tools, desktop launchers, and stream scripts were staged before this blocker."
     exit 2
   fi
   say "Staging GlassCoder/JACK and stream service definitions (stream remains OFF)"
@@ -121,10 +137,11 @@ say "Verifying currently staged user executables"
 for name in stationplan smartclock catalog external-media requests live-requests selftest loggen; do
   [[ -x "$HOME/.local/bin/rdcomplete-$name" ]] || fail "Missing staged rdcomplete-$name"
 done
-if (( SKIP_PACKAGES == 0 )); then
-  for name in stream metadata jack-route; do
-    [[ -x "$HOME/.local/bin/rdcomplete-$name" ]] || fail "Missing staged rdcomplete-$name"
-  done
-fi
+for name in stream metadata jack-route; do
+  [[ -x "$HOME/.local/bin/rdcomplete-$name" ]] || fail "Missing staged rdcomplete-$name"
+done
+for unit in rdcomplete-stream.service rdcomplete-jack-route.service; do
+  [[ -f "$HOME/.config/systemd/user/$unit" ]] || fail "Missing user service file: $unit"
+done
 say "COMPONENT STAGING FINISHED. No broadcast services, NAS sources, clocks, or remote streams were activated."
 say "External NAS address, station service/groups, stream server and source credentials still require actual station configuration."

@@ -69,6 +69,8 @@ class ProvisioningTests(unittest.TestCase):
         self.assertNotIn("rm -f /var/lib/dpkg/lock", script)
         self.assertNotIn("kill -9", script)
         self.assertIn("if systemctl --user daemon-reload; then", script)
+        self.assertIn("--skip-dependencies", script)
+        self.assertIn("all_installed", script)
         self.assertIn("User systemd manager unavailable", script)
 
     def test_package_resume_and_reauth(self):
@@ -97,6 +99,10 @@ class ProvisioningTests(unittest.TestCase):
         self.assertIn('install -m 0644 "$source_path"', script)
         self.assertIn('fuser -s /var/lib/dpkg/lock-frontend', script)
         self.assertIn('--no-packages', script)
+        self.assertIn("sudo -n mariadb -NBe", script)
+        self.assertIn("Rivendell.GROUPS", script)
+        self.assertIn("Rivendell.SERVICES", script)
+        self.assertIn("--skip-dependencies", script)
         self.assertNotIn('dpkg-buildpackage', script)
         self.assertNotIn('apt-get install', script)
         self.assertNotIn('mariadb -e', script)
