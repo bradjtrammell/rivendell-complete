@@ -64,7 +64,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$ROOT"
 log 'Checking installer syntax and Python modules'
 bash -n tools/setup-nas.sh tools/install-ubuntu26.sh tools/install-streaming.sh \
-  tools/install-requests.sh tools/install-loggen.sh tools/install-station-utilities.sh tools/deploy-test-system.sh
+  tools/install-requests.sh tools/install-loggen.sh tools/install-station-utilities.sh tools/install-airplay-requests.sh tools/upgrade-native-runtime.sh tools/deploy-test-system.sh
 python3 -m compileall -q tools tests
 if [[ "$mode" == check ]]; then
   log 'Running the development regression suite (check-only; never blocks an installed station)'
