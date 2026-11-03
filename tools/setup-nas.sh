@@ -39,6 +39,8 @@ done
    "$mp" =~ ^/mnt/radio-music/[a-z][a-z0-9_-]{0,31}$ ]] ||
   die 'Mountpoint must be /mnt/name or /mnt/radio-music/SOURCE_NAME'
 if [[ "$mp" == /mnt/radio-music/* ]]; then
+  [[ "${mp##*/}" != legacy ]] ||
+    die 'The source name legacy is reserved for existing direct-root mounts'
   [[ ! -L /mnt/radio-music ]] || die 'NAS collection root cannot be a symlink'
   [[ ! -e /mnt/radio-music || -d /mnt/radio-music ]] ||
     die 'NAS collection root is not a directory'
@@ -80,12 +82,16 @@ if awk -v source="$src" -v target="$mp" '
 fi
 
 if [[ "$proto" == --nfs ]]; then
-  DEBIAN_FRONTEND=noninteractive apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nfs-common
+  if [[ "$(dpkg-query -W -f='\${Status}' nfs-common 2>/dev/null || :)" != 'install ok installed' ]]; then
+    DEBIAN_FRONTEND=noninteractive apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nfs-common
+  fi
   options='ro,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s,hard,timeo=50,retrans=3'
 else
-  DEBIAN_FRONTEND=noninteractive apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cifs-utils
+  if [[ "$(dpkg-query -W -f='\${Status}' cifs-utils 2>/dev/null || :)" != 'install ok installed' ]]; then
+    DEBIAN_FRONTEND=noninteractive apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cifs-utils
+  fi
   read -r -p 'NAS SMB username: ' username
   [[ -n "$username" && "$username" != *[[:cntrl:]]* && "$username" != *'='* && "$username" != *'\'* ]] ||
     die 'Invalid SMB username'
