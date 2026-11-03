@@ -13,6 +13,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
   die 'RDAirPlay source missing or symlinked'
 grep -Fq 'Rivendell Complete - Listener Requests' "$ROOT/rdairplay/rdairplay.cpp" ||
   die 'Expected native listener request integration not found'
+# A source-only Requests feature is not an installed feature. Recompile
+# this target before staging so stale upstream binaries cannot pass.
+[[ -f "$ROOT/rdairplay/Makefile" ]] ||
+  die 'Configured native build tree missing. Build Rivendell packages first.'
+command -v make >/dev/null || die 'make is required to compile RDAirPlay'
+echo 'Compiling enhanced native RDAirPlay Requests panel'
+make -C "$ROOT/rdairplay" -j2 rdairplay ||
+  die 'RDAirPlay compilation failed; original player remains unchanged'
 bin="$ROOT/rdairplay/.libs/rdairplay"
 if [[ ! -x "$bin" ]]; then bin="$ROOT/rdairplay/rdairplay"; fi
 [[ -f "$bin" && -x "$bin" && ! -L "$bin" ]] ||
@@ -23,10 +31,10 @@ if [[ ! -x "$bin" ]]; then bin="$ROOT/rdairplay/rdairplay"; fi
 dpkg-query -W -f='${Status} ${Version}\n' rivendell |
   grep -Fxq 'install ok installed 4.5.0-1' || die 'Unexpected native package baseline'
 command -v readelf >/dev/null || die 'readelf required'
-readelf -h "$bin" | grep -Fq 'ELF64' || die 'Not an ELF64 executable'
-readelf -h "$bin" | grep -Fq 'Advanced Micro Devices X86-64' || die 'Not an AMD64 executable'
+readelf -h "$bin" | grep -F 'ELF64' || die 'Not an ELF64 executable'
+readelf -h "$bin" | grep -F 'Advanced Micro Devices X86-64' || die 'Not an AMD64 executable'
 command -v strings >/dev/null || die 'strings required'
-strings "$bin" | grep -Fq 'Rivendell Complete - Listener Requests' ||
+strings "$bin" | grep -F 'Rivendell Complete - Listener Requests' ||
   die 'Binary lacks the newly compiled listener request panel'
 if ldd "$bin" | grep -Eq 'not found|=>[[:space:]]+not'; then
   die 'Native binary has unresolved runtime libraries'
