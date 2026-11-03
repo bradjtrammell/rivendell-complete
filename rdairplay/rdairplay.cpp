@@ -1601,10 +1601,14 @@ void MainWidget::requestsQueueData()
 
 void MainWidget::requestsTimerData()
 {
-  if(air_requests_dialog==NULL||!air_requests_dialog->isVisible()) {
+  if(air_requests_dialog==NULL) {
     return;
   }
-  RefreshRequestTable();
+  // A minimized/closed request panel must not silently disable an explicitly
+  // enabled on-air auto-fulfillment session.
+  if(air_requests_dialog->isVisible()) {
+    RefreshRequestTable();
+  }
   if(air_requests_auto==NULL||!air_requests_auto->isChecked()||
      air_op_mode[0]!=RDAirPlayConf::Auto||!air_add_button->isEnabled()) {
     return;
