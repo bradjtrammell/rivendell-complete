@@ -642,7 +642,7 @@ class Console(QMainWindow):
                      "import-folders", "import", "scan", "audit-direct-audio", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
-        if mode == "audit-direct-audio" and good:
+        if mode == "audit-direct-audio":
             output = bytes(self.output).decode("utf-8", "replace")
             self.import_output.setPlainText(output)
         if mode in ("mount", "readiness") and good:
