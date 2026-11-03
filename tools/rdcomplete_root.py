@@ -173,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     schedule.add_argument("--fill-cart", type=int, default=0)
     commands.add_parser("restart-audio")
     commands.add_parser("audit-direct-audio")
+    commands.add_parser("repair-audio-metadata")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
@@ -230,6 +231,16 @@ def main(argv: list[str] | None = None) -> int:
         subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", "rivendell"],
                        check=True, timeout=15)
         print("Rivendell audio daemon restarted with the NAS configuration")
+    elif args.action == "repair-audio-metadata":
+        verify_sources()
+        script = HERE / "rdcomplete_audio_audit.py"
+        if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
+            raise CommissionError("Protected metadata repair is unavailable or unsafe")
+        result = subprocess.run(
+            ["/usr/bin/python3", str(script), "--repair"],
+            check=False, timeout=21600)
+        if result.returncode:
+            raise CommissionError("Metadata repair incomplete; existing recovery snapshots are preserved")
     elif args.action == "audit-direct-audio":
         script = HERE / "rdcomplete_direct_audio_check.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
