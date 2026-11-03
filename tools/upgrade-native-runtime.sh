@@ -95,6 +95,12 @@ sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall --no-inst
   die 'Control Center missing after upgrade'
 sudo systemctl is-active --quiet rivendell ||
   die 'Rivendell did not restart; inspect journalctl -u rivendell'
+say 'Updating Control Center and persistent NAS recovery without changing catalog'
+bash "$ROOT/tools/install-control-center.sh" --no-packages ||
+  die 'Native core updated, but console/NAS helper refresh failed; inspect this error'
+say 'Refreshing separately launchable native Requests panel'
+bash "$ROOT/tools/install-airplay-requests.sh" ||
+  die 'Native core updated, but separate Requests launcher staging failed'
 say 'Native runtime installed. NAS references remain in place; verify sample playback before going on air.'
 say "Installed source revision: $(git -C "$ROOT" rev-parse HEAD)"
 say "Recovery snapshots: $backup"
