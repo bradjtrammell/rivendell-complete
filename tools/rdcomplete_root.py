@@ -164,6 +164,13 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("configure-external")
     commands.add_parser("export-catalog")
     commands.add_parser("list-groups")
+    schedule = commands.add_parser("schedule-catalog")
+    schedule.add_argument("--groups", required=True,
+                          help="Comma-separated existing music groups")
+    schedule.add_argument("--id-cart", type=int, required=True,
+                          help="Actual top-of-hour legal ID cart")
+    schedule.add_argument("--jingle-cart", type=int, default=0)
+    schedule.add_argument("--fill-cart", type=int, default=0)
     commands.add_parser("restart-audio")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
@@ -236,6 +243,56 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             db.close()
         print(json.dumps({"groups": [g for g in groups if GROUP_PATTERN.fullmatch(g)]}))
+    elif args.action == "schedule-catalog":
+        import pymysql
+        from rdcatalog import export_catalog, load_external_map
+        from rdexternal import read_db_settings, media_path
+        if len(args.groups) > 512:
+            raise CommissionError("Too many rotation group names")
+        groups = args.groups.split(",")
+        if not groups or len(groups) > 24 or len(set(groups)) != len(groups):
+            raise CommissionError("Choose 1-24 distinct existing music groups")
+        if any(not GROUP_PATTERN.fullmatch(group) for group in groups):
+            raise CommissionError("Invalid music group in rotation")
+        for cart in (args.id_cart, args.jingle_cart, args.fill_cart):
+            if cart < 0 or cart > 999999:
+                raise CommissionError("Invalid station cart number")
+        if args.id_cart == 0:
+            raise CommissionError("Actual station identification cart is required")
+        tracks = export_catalog(Path("/etc/rd.conf"), groups)
+        if not tracks:
+            raise CommissionError("No playable audio in the selected music categories")
+        db = pymysql.connect(**read_db_settings(Path("/etc/rd.conf")))
+        root, external = load_external_map(Path("/etc/rd.conf"))
+        selections = {}
+        try:
+            with db.cursor() as cursor:
+                for label, number in (("top_hour", args.id_cart),
+                                      ("jingle", args.jingle_cart),
+                                      ("fill_bed", args.fill_cart)):
+                    if number == 0:
+                        continue
+                    cursor.execute(
+                        "SELECT NUMBER,AVERAGE_LENGTH,VALIDITY,TYPE,GROUP_NAME "
+                        "FROM CART WHERE NUMBER=%s", (number,))
+                    row = cursor.fetchone()
+                    if row is None or int(row[3]) != 1 or int(row[2]) not in (2, 3):
+                        raise CommissionError(f"{label} cart is not a valid playable audio cart")
+                    length = int(row[1])
+                    if not 500 <= length <= 3600000:
+                        raise CommissionError(f"{label} cart has invalid duration")
+                    if root is not None and number in external:
+                        source = media_path(root, external[number])
+                        if source.suffix.lower() not in (".mp3", ".ogg", ".wav"):
+                            raise CommissionError(f"{label} cart audio format not supported")
+                    elif not (Path("/var/snd") / f"{number:06d}_001.wav").is_file():
+                        raise CommissionError(f"{label} cart has no accessible audio file")
+                    selections[label] = {"cart": number, "duration_ms": length,
+                                         "group": str(row[4]).strip()}
+        finally:
+            db.close()
+        print(json.dumps({"tracks": tracks, "groups": groups,
+                          "specials": selections}, ensure_ascii=False))
     elif args.action == "export-catalog":
         script = HERE / "rdcatalog.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
