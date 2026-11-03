@@ -20,7 +20,9 @@ source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Requires Ubuntu 26.04'
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas.sh \
-            tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdcomplete_schedule_ui.py tools/rdbrowse.py tools/rdsourcefolders.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py xdg/rivendell-complete.desktop; do
+            tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdcomplete_nas_restore.py tools/rdcomplete_schedule_ui.py tools/rdbrowse.py tools/rdsourcefolders.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py
+            systemd/rdcomplete-nas-restore.service systemd/rdcomplete-nas-restore.timer
+            xdg/rivendell-complete.desktop; do
   [[ -f "$ROOT/$path" && ! -L "$ROOT/$path" ]] || fail "Missing or symlinked source: $path"
 done
 if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null ||
@@ -50,10 +52,17 @@ if (( SKIP_PACKAGES == 0 )); then
 fi
 sudo -v
 sudo install -d -o root -g root -m 0755 /usr/local/libexec/rivendell-complete
-for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py \
+for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py rdcomplete_nas_restore.py \
             rdrequest_ops.py rdrequests.py rdlive.py; do
   sudo install -o root -g root -m 0755 "$ROOT/tools/$name" "/usr/local/libexec/rivendell-complete/$name"
 done
+sudo install -o root -g root -m 0644 "$ROOT/systemd/rdcomplete-nas-restore.service" \
+  /etc/systemd/system/rdcomplete-nas-restore.service
+sudo install -o root -g root -m 0644 "$ROOT/systemd/rdcomplete-nas-restore.timer" \
+  /etc/systemd/system/rdcomplete-nas-restore.timer
+sudo systemctl daemon-reload || fail 'Cannot reload persistent NAS mount recovery units'
+sudo systemctl enable --now rdcomplete-nas-restore.timer ||
+  fail 'Could not enable NAS reattachment after reboot'
 sudo install -o root -g root -m 0755 "$ROOT/tools/rdcomplete_root.py" \
   /usr/local/libexec/rivendell-complete/rdcomplete_root.py
 # Expose read-only mount inventory to the GUI without a root prompt.
