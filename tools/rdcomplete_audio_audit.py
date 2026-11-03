@@ -60,7 +60,7 @@ def create_recovery_copy(records: list[dict], folder: Path = BACKUPS) -> Path:
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)
     if folder.stat().st_uid != os.geteuid() or folder.stat().st_mode & 0o077:
         raise AuditError("Recovery directory has unsafe owner/permissions")
-    name = datetime.now(timezone.utc).strftime("import-carts-%Y%m%dT%H%M%SZ-") + str(os.getpid()) + ".json"
+    name = datetime.now(timezone.utc).strftime("import-carts-%Y%m%dT%H%M%S%fZ-") + str(os.getpid()) + ".json"
     target = folder / name
     with target.open("x", encoding="utf-8") as handle:
         os.fchmod(handle.fileno(), 0o600)
