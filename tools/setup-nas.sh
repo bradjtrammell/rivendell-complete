@@ -35,7 +35,20 @@ while (($#)); do
   esac
 done
 [[ -n "$proto" && -n "$src" ]] || { usage >&2; exit 2; }
-[[ "$mp" =~ ^/mnt/[A-Za-z0-9_-]+$ ]] || die 'Mountpoint must be a direct /mnt/name path'
+[[ "$mp" =~ ^/mnt/[A-Za-z0-9_-]+$ ||
+   "$mp" =~ ^/mnt/radio-music/[a-z][a-z0-9_-]{0,31}$ ]] ||
+  die 'Mountpoint must be /mnt/name or /mnt/radio-music/SOURCE_NAME'
+if [[ "$mp" == /mnt/radio-music/* ]]; then
+  [[ ! -L /mnt/radio-music ]] || die 'NAS collection root cannot be a symlink'
+  [[ ! -e /mnt/radio-music || -d /mnt/radio-music ]] ||
+    die 'NAS collection root is not a directory'
+  mountpoint -q /mnt/radio-music &&
+    die 'Legacy NAS mount occupies the collection root; refusing to hide existing music'
+fi
+nas_credentials=/etc/rivendell-complete/nas.cred
+if [[ "$mp" == /mnt/radio-music/* ]]; then
+  nas_credentials="/etc/rivendell-complete/nas-${mp##*/}.cred"
+fi
 # /etc/fstab fields are unescaped: refuse whitespace, comments, commas, and backslashes.
 [[ "$src" != *[[:space:]]* && "$src" != *'#'* && "$src" != *','* && "$src" != *'\'* ]] ||
   die 'Share contains a character unsafe for /etc/fstab'
@@ -79,13 +92,13 @@ else
   read -r -s -p 'NAS SMB password: ' password; printf '\n'
   [[ -n "$password" && "$password" != *$'\n'* && "$password" != *$'\r'* ]] ||
     die 'Invalid SMB password'
-  options='ro,credentials=/etc/rivendell-complete/nas.cred,vers=3.1.1,iocharset=utf8,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s'
+  options="ro,credentials=$nas_credentials,vers=3.1.1,iocharset=utf8,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s"
 fi
 
 # Do not overwrite an existing credential file.
 if [[ "$proto" == --smb ]]; then
   install -d -o root -g root -m 0700 /etc/rivendell-complete
-  [[ ! -e /etc/rivendell-complete/nas.cred && ! -L /etc/rivendell-complete/nas.cred ]] ||
+  [[ ! -e "$nas_credentials" && ! -L "$nas_credentials" ]] ||
     die 'SMB credential file already exists; refusing overwrite'
 fi
 backup=
@@ -103,7 +116,7 @@ on_error() {
     systemctl daemon-reload || true
   fi
   if [[ "$credential_created" -eq 1 ]]; then
-    rm -f /etc/rivendell-complete/nas.cred
+    rm -f "$nas_credentials"
   fi
   printf 'Rivendell Complete NAS: mount/configuration failed (status %s); check connectivity and source permissions\n' "$rc" >&2
   exit "$rc"
@@ -115,8 +128,8 @@ if [[ "$proto" == --smb ]]; then
   chmod 0600 "$credential_temp"
   printf 'username=%s\npassword=%s\n' "$username" "$password" > "$credential_temp"
   unset password
-  mv -n "$credential_temp" /etc/rivendell-complete/nas.cred
-  [[ -f /etc/rivendell-complete/nas.cred ]] || die 'Could not install credential file'
+  mv -n "$credential_temp" "$nas_credentials"
+  [[ -f "$nas_credentials" ]] || die 'Could not install credential file'
   credential_created=1
 fi
 
@@ -129,6 +142,10 @@ cp -p /etc/fstab "$temp"
 printf '\n# Rivendell Complete original audio: READ ONLY\n%s %s %s %s 0 0\n' \
   "$src" "$mp" "$fstype" "$options" >> "$temp"
 chmod 0644 "$temp"
+if [[ "$mp" == /mnt/radio-music/* ]]; then
+  mkdir -p /mnt/radio-music
+  chmod 0755 /mnt/radio-music
+fi
 mkdir -p "$mp"
 mv -f "$temp" /etc/fstab
 temp=
@@ -161,4 +178,8 @@ fstab_changed=0
 trap - ERR
 printf 'NAS mounted and verified read-only: %s -> %s (%s)\n' "$src" "$mp" "$actual_type"
 printf 'Recovery copy of original fstab: %s\n' "$backup"
-printf 'Set [ExternalAudio] Root=%s in the local Rivendell configuration.\n' "$mp"
+if [[ "$mp" == /mnt/radio-music/* ]]; then
+  printf 'Set [ExternalAudio] Root=/mnt/radio-music (named multi-source library).\n'
+else
+  printf 'Set [ExternalAudio] Root=%s in the local Rivendell configuration.\n' "$mp"
+fi

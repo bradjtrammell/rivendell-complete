@@ -259,6 +259,8 @@ def main(argv=None) -> int:
     ap.add_argument("--last-cart", type=int, default=899999)
     ap.add_argument("--limit", type=int, default=None, help="First N tracks, for test imports")
     ap.add_argument("--config", type=Path, default=Path("/etc/rd.conf"))
+    ap.add_argument("--reference-prefix", default="",
+                    help="Named NAS source ID. Stored references are ID/relative-path")
     ap.add_argument("--commit", action="store_true", help="Write CART/CUTS rows and refs")
     args = ap.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,10}", args.group):
@@ -267,6 +269,8 @@ def main(argv=None) -> int:
         ap.error("Invalid cart number range")
     if args.limit is not None and args.limit < 1:
         ap.error("--limit must be positive")
+    if args.reference_prefix and not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", args.reference_prefix):
+        ap.error("Invalid NAS source reference prefix")
     root = args.root.resolve(strict=True)
     if not root.is_dir() or root == Path("/"):
         ap.error("--root must be an existing NAS subdirectory")
@@ -281,7 +285,8 @@ def main(argv=None) -> int:
     tracks = []
     skipped = 0
     for relative in scan_paths(root, args.limit):
-        if relative in previous:
+        reference = f"{args.reference_prefix}/{relative}" if args.reference_prefix else relative
+        if reference in previous:
             continue
         try:
             tracks.append(probe(root, relative))
@@ -309,6 +314,10 @@ def main(argv=None) -> int:
                 raise ImportFailure("Could not acquire catalog import lock")
         used = check_db(conn, args.group, args.first_cart, args.last_cart)
         for rel, cart in previous.items():
+            if args.reference_prefix and not rel.startswith(args.reference_prefix + "/"):
+                # Other independent NAS sources may use different Rivendell
+                # groups, and must not be interpreted as a group mismatch.
+                continue
             if not existing_db_cart(conn, cart, args.group):
                 raise ImportFailure(f"Orphan reference {cart:06d}_001.ref: repair manually before import")
         next_cart = args.first_cart
@@ -323,7 +332,9 @@ def main(argv=None) -> int:
             try:
                 insert_cart(conn, next_cart, args.group, track)
                 db_inserted = True
-                ref_path = write_reference(refs, cut, track.relative)
+                reference = (f"{args.reference_prefix}/{track.relative}"
+                             if args.reference_prefix else track.relative)
+                ref_path = write_reference(refs, cut, reference)
                 conn.commit()
             except Exception:
                 conn.rollback()
