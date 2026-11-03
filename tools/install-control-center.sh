@@ -21,7 +21,7 @@ source /etc/os-release
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas.sh \
             tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdcomplete_nas_restore.py tools/rdcomplete_schedule_ui.py tools/rdbrowse.py tools/rdsourcefolders.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py \
-            systemd/rdcomplete-nas-restore.service systemd/rdcomplete-nas-restore.timer
+            systemd/rdcomplete-nas-restore.service systemd/rdcomplete-nas-restore.timer \
             xdg/rivendell-complete.desktop; do
   [[ -f "$ROOT/$path" && ! -L "$ROOT/$path" ]] || fail "Missing or symlinked source: $path"
 done
