@@ -2,6 +2,7 @@
 # Rivendell Complete 4.5.0: native Ubuntu 26.04 x86_64 build and fresh install.
 set -Eeuo pipefail
 umask 027
+trap 'rc=$?; printf "[RivendellComplete] ERROR: Command failed at line %s (exit %s): %s\n" "$LINENO" "$rc" "$BASH_COMMAND" >&2' ERR
 
 MODE=build
 REUSE_PACKAGES=0
@@ -70,8 +71,11 @@ libltdl-dev rsync apache2 rsyslog mariadb-client
 docbook5-xml libxml2-utils docbook-xsl-ns xsltproc fop icedax
 qttranslations5-l10n ffmpeg openssl'
 missing=()
+log 'Checking native Ubuntu 26.04 dependency candidates'
 while IFS= read -r p; do
-  [[ -z "$p" ]] && continue
+  if [[ -z "$p" ]]; then
+    continue
+  fi
   candidate="$(apt-cache policy "$p" | awk '/Candidate:/ {print $2;exit}')"
   if [[ -z "$candidate" || "$candidate" == '(none)' ]]; then
     missing+=("$p")
