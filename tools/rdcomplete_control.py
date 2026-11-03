@@ -362,7 +362,6 @@ class Console(QMainWindow):
         actions = QHBoxLayout()
         actions.addWidget(self.register(push("Preview scan", self.scan_import)))
         actions.addWidget(self.register(push("Import all supported tracks", self.import_music, True)))
-        actions.addWidget(self.register(push("Repair existing audio", self.repair_audio, True)))
         page.layout_.addLayout(actions)
         page.add(note("Import into any existing Rivendell group, such as MUSIC, IDENTS, STINGS "
                       "or JINGLES if configured. Use RDAdmin to create new categories and "
@@ -639,14 +638,14 @@ class Console(QMainWindow):
             except (ValueError, KeyError, TypeError):
                 pass
         if mode in ("mount", "mount-list", "nas-discovery", "group-list",
-                     "import-folders", "import", "scan", "materialize-audio", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
+                     "import-folders", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
         if mode in ("mount", "readiness") and good:
             QTimer.singleShot(0, self.refresh_mounts)
-        if mode in ("import", "materialize-audio") and good:
-            QMessageBox.information(self, "Playable audio prepared",
-                                    "Native cuts have been prepared. Verify sample playback in RDAirPlay before using them on air.")
+        if mode == "import" and good:
+            QMessageBox.information(self, "Music import completed",
+                                    "Import finished. Export an updated request catalog on the Listener requests page.")
         self.command.deleteLater()
         self.command = None
         self.output = bytearray()
@@ -1009,15 +1008,6 @@ class Console(QMainWindow):
         self.pending_nas_mapping = (name, folder)
         self._root("mount-smb" if smb else "mount-nfs",
                    ["--source", src, "--name", name], creds, "mount")
-
-    def repair_audio(self):
-        if not self._confirm("Repair existing imported audio",
-                "Create missing native WAV cuts for already imported NAS references?\n\n"
-                "Original NAS music remains read-only. This may use substantial space "
-                "in /var/snd and may take time for large libraries. Existing cuts are never overwritten. "
-                "Close RDAirPlay before proceeding."):
-            return
-        self._root("materialize-audio", mode="materialize-audio")
 
     def restart_daemon(self):
         if not self._confirm("Restart Rivendell audio services",
