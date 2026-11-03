@@ -56,10 +56,10 @@ class AuditTests(unittest.TestCase):
             self.assertEqual(target.stat().st_mode & 0o777, 0o600)
             self.assertEqual(folder.stat().st_mode & 0o777, 0o700)
             self.assertEqual(json.loads(target.read_text()), [{"cart": 100001}])
-            with self.assertRaises(audit.AuditError):
-                audit.create_recovery_copy([{"cart": 100002}],
-                                           Path(d) / "alias")
-                # Alias safety checked separately below.
+            # A second audit does not rewrite the original recovery snapshot.
+            another = audit.create_recovery_copy([{"cart": 100002}], folder)
+            self.assertNotEqual(target, another)
+            self.assertEqual(json.loads(target.read_text()), [{"cart": 100001}])
             # No backend deletion, no original media mutation.
             self.assertTrue(target.is_file())
 
