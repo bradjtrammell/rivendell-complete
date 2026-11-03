@@ -118,6 +118,11 @@ class Console(QMainWindow):
         self.smb_secret: bytes | None = None
         self.buttons: list[QPushButton] = []
         self.request_ids: list[int] = []
+        self.nas_discovery_rows: list[dict] = []
+        self.nas_discovery_mode = ""
+        self.import_folder = ""
+        self.last_import_source = ""
+        self.groups_loaded = False
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -155,6 +160,7 @@ class Console(QMainWindow):
         self._audio()
         self._scheduling()
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.menu.currentRowChanged.connect(self.page_changed)
         self.menu.setCurrentRow(0)
         self.status = QLabel("Safe mode · No outgoing audio was enabled by this application.")
         self.statusBar().addWidget(self.status, 1)
@@ -207,6 +213,9 @@ class Console(QMainWindow):
         self.nas_protocol = QComboBox()
         self.nas_protocol.addItems(["NFS", "SMB"])
         form.addRow("Protocol", self.nas_protocol)
+        self.nas_server = QLineEdit()
+        self.nas_server.setPlaceholderText("192.168.0.146 or nas.internal")
+        form.addRow("NAS server", self.nas_server)
         self.nas_source = QLineEdit()
         self.nas_source.setPlaceholderText("HOST:/export/music  or  //HOST/music")
         form.addRow("Share / export", self.nas_source)
@@ -219,6 +228,28 @@ class Console(QMainWindow):
         self.nas_protocol.currentTextChanged.connect(self._nas_fields)
         self._nas_fields()
         page.add(box)
+        browse_actions = QHBoxLayout()
+        browse_actions.addWidget(self.register(push(
+            "Discover server shares / NFS exports", self.discover_shares, True)))
+        browse_actions.addWidget(self.register(push(
+            "Browse selected SMB share folders", self.discover_remote_folders, True)))
+        page.layout_.addLayout(browse_actions)
+        self.nas_discovery = QTableWidget(0, 3)
+        self.nas_discovery.setHorizontalHeaderLabels(
+            ["Share / folder", "Details", "Available for mapping"])
+        self.nas_discovery.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.nas_discovery.setSelectionBehavior(QTableWidget.SelectRows)
+        self.nas_discovery.setSelectionMode(QTableWidget.SingleSelection)
+        self.nas_discovery.horizontalHeader().setStretchLastSection(True)
+        self.nas_discovery.setMinimumHeight(145)
+        self.nas_discovery.itemSelectionChanged.connect(self.select_discovery)
+        page.add(self.nas_discovery)
+        self.nas_browse_folder = QLineEdit()
+        self.nas_browse_folder.setPlaceholderText("Optional SMB subfolder: Albums / Rock")
+        form.addRow("Browse within share", self.nas_browse_folder)
+        page.add(note("Select a discovered share to populate the mapping. SMB folder browsing uses "
+                      "temporary protected credentials and does not mount or modify source files. "
+                      "NFS shows exports advertised by the server; some NFSv4 servers disable export listing."))
         page.add(note("A system authentication dialog will ask permission to mount the NAS. SMB credentials are never included in command arguments or displayed in activity logs."))
         page.add(self.register(push("Connect and configure source", self.mount_nas)))
         page.add(self.register(push("Apply configuration to audio daemon", self.restart_daemon, True)))
@@ -239,18 +270,39 @@ class Console(QMainWindow):
         self.import_count = QSpinBox()
         self.import_count.setRange(1, 500)
         self.import_count.setValue(25)
-        box = QGroupBox("Select one existing source · Destination group: MUSIC")
+        box = QGroupBox("Choose source, folder and Rivendell category")
         form = QFormLayout(box)
         self.import_source = QComboBox()
         self.import_source.addItem("Select a mounted source", "")
         form.addRow("NAS source", self.import_source)
+        self.import_group = QComboBox()
+        self.import_group.addItem("Load existing station groups", "")
+        form.addRow("Import into category / group", self.import_group)
+        self.import_folder_path = QLineEdit()
+        self.import_folder_path.setReadOnly(True)
+        self.import_folder_path.setPlaceholderText("Entire selected share")
+        form.addRow("Selected subfolder", self.import_folder_path)
         form.addRow("Preview up to", self.import_count)
         page.add(box)
+        selection_actions = QHBoxLayout()
+        selection_actions.addWidget(self.register(push("Refresh categories", self.load_groups, True)))
+        selection_actions.addWidget(self.register(push("Manage groups in RDAdmin",
+                            lambda: self.launch("rdadmin"), True)))
+        selection_actions.addWidget(self.register(push("Browse source folders", self.browse_import_folders, True)))
+        selection_actions.addWidget(self.register(push("Up one folder", self.import_folder_parent, True)))
+        page.layout_.addLayout(selection_actions)
+        self.import_folder_list = QListWidget()
+        self.import_folder_list.setMinimumHeight(115)
+        self.import_folder_list.itemDoubleClicked.connect(self.enter_import_folder)
+        page.add(self.import_folder_list)
         actions = QHBoxLayout()
         actions.addWidget(self.register(push("Preview scan", self.scan_import)))
         actions.addWidget(self.register(push("Import all supported tracks", self.import_music, True)))
         page.layout_.addLayout(actions)
-        page.add(note("Supported import formats: MP3, PCM WAV (16/24-bit), and Ogg Vorbis. FLAC is not yet supported by this external-audio playback path. Stop RDAirPlay before importing."))
+        page.add(note("Import into any existing Rivendell group, such as MUSIC, IDENTS, STINGS "
+                      "or JINGLES if configured. Use RDAdmin to create new categories and "
+                      "RDLogManager to place them in clocks/grids. Original audio stays read-only. "
+                      "FLAC external playback is not yet qualified. Stop RDAirPlay before importing."))
         self.import_output = QPlainTextEdit()
         self.import_output.setReadOnly(True)
         self.import_output.setFont(QFont("DejaVu Sans Mono", 10))
@@ -350,7 +402,15 @@ class Console(QMainWindow):
             ["rdcomplete-loggen", "--service", SERVICE, "--days", "7", "--dry-run"], "schedule-preview"))))
         page.add(self.register(push("Enable future log timer", self.enable_schedule, True)))
         page.add(note("Enabling scheduling requires configured grids, clocks, legal IDs and playable carts in RDLogManager. This tool is not continuous live backtiming."))
-        page.add(self.register(push("Open RDLogManager", lambda: self.launch("rdlogmanager"), True)))
+        page.add(self.register(push(
+            "Manage music/jingle rotations & hourly clocks (RDLogManager)",
+            lambda: self.launch("rdlogmanager"), True)))
+        page.add(self.register(push("Review and edit generated logs (RDLogEdit)",
+                            lambda: self.launch("rdlogedit"), True)))
+        page.add(note("Your imported Rivendell groups become scheduling categories. In RDLogManager, "
+                      "create category rules and clocks, assign them to your Production service's "
+                      "hourly grid, then preview before enabling the log timer. "
+                      "Scheduling IDs and spots requires actual created carts."))
         page.finish()
         self.pages.addWidget(page)
 
@@ -461,6 +521,24 @@ class Console(QMainWindow):
         for button in self.buttons:
             button.setEnabled(True)
         self.status.setText(f"{mode}: {'completed' if good else 'failed (exit '+str(code)+')'}")
+        if mode == "nas-discovery" and good:
+            try:
+                self._show_nas_discovery(bytes(self.output))
+            except (ValueError, KeyError, TypeError) as exc:
+                good = False
+                self._alert(f"NAS discovery returned invalid data: {exc}")
+        if mode == "group-list" and good:
+            try:
+                self._show_groups(bytes(self.output))
+            except (ValueError, KeyError, TypeError) as exc:
+                good = False
+                self._alert(f"Group list unavailable: {exc}")
+        if mode == "import-folders" and good:
+            try:
+                self._show_import_folders(bytes(self.output))
+            except (ValueError, KeyError, TypeError) as exc:
+                good = False
+                self._alert(f"Could not browse source folders: {exc}")
         if mode == "mount-list" and good:
             try:
                 self._render_mounts(bytes(self.output))
@@ -482,7 +560,8 @@ class Console(QMainWindow):
                 self.health.setPlainText(summary)
             except (ValueError, KeyError, TypeError):
                 pass
-        if mode in ("mount", "mount-list", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
+        if mode in ("mount", "mount-list", "nas-discovery", "group-list",
+                     "import-folders", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
         if mode in ("mount", "readiness") and good:
@@ -498,6 +577,147 @@ class Console(QMainWindow):
     def readiness(self):
         self.health.clear()
         self.execute(["rdcomplete-selftest", "--json"], "readiness")
+
+    def page_changed(self, page: int):
+        if page == 2 and not self.groups_loaded and not self.busy:
+            self.load_groups()
+
+    def _discovery_command(self, mode: str):
+        host = self.nas_server.text().strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,252}", host):
+            self._alert("Enter a valid NAS IP address or DNS hostname.")
+            return
+        smb = self.nas_protocol.currentText() == "SMB"
+        args = ["rdcomplete-browse", "--protocol", "smb" if smb else "nfs",
+                "--mode", mode, "--server", host]
+        if mode == "folders":
+            if not smb:
+                self._alert("NFS folders are available after mounting an advertised export.")
+                return
+            source = self.nas_source.text().strip()
+            prefix = f"//{host}/"
+            if not source.startswith(prefix):
+                self._alert("Select a discovered share first.")
+                return
+            args += ["--share", source[len(prefix):],
+                     "--folder", self.nas_browse_folder.text().strip()]
+        secret = None
+        if smb:
+            username = self.nas_username.text().strip()
+            password = self.nas_password.text()
+            if not username or not password:
+                self._alert("Enter the SMB username and password to discover shares.")
+                return
+            secret = json.dumps({"username": username, "password": password}).encode("utf-8")
+        self.nas_discovery_mode = mode
+        self.execute(args, "nas-discovery", secret)
+
+    def discover_shares(self):
+        self._discovery_command("shares")
+
+    def discover_remote_folders(self):
+        self._discovery_command("folders")
+
+    def _show_nas_discovery(self, raw: bytes):
+        result = json.loads(raw)
+        mode = self.nas_discovery_mode
+        if mode == "shares":
+            rows = result.get("shares")
+        else:
+            rows = [{"name": value, "mountable": True,
+                     "description": "Directory"} for value in result.get("folders", [])]
+        if not isinstance(rows, list):
+            raise ValueError("NAS discovery returned an invalid share list")
+        self.nas_discovery_rows = rows
+        self.nas_discovery.setRowCount(len(rows))
+        for r, item in enumerate(rows):
+            for c, value in enumerate([
+                item["name"], item.get("description", ""),
+                "Selectable" if item.get("mountable") else "Unsupported share name",
+            ]):
+                cell = QTableWidgetItem(str(value))
+                cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
+                self.nas_discovery.setItem(r, c, cell)
+        self.status.setText(f"Discovered {len(rows)} {'shares/exports' if mode=='shares' else 'folders'}")
+
+    def select_discovery(self):
+        row = self.nas_discovery.currentRow()
+        if row < 0 or row >= len(self.nas_discovery_rows):
+            return
+        choice = self.nas_discovery_rows[row]
+        if not choice.get("mountable"):
+            return
+        if self.nas_discovery_mode == "shares":
+            host = self.nas_server.text().strip()
+            name = choice["name"]
+            self.nas_source.setText(
+                f"//{host}/{name}" if self.nas_protocol.currentText() == "SMB"
+                else f"{host}:{name}")
+            suggested = re.sub(r"[^a-z0-9_-]", "-", str(name).lower()).strip("-")
+            if suggested and not self.nas_name.text():
+                self.nas_name.setText(("share-" + suggested)[:32])
+            self.nas_browse_folder.clear()
+        else:
+            folder = self.nas_browse_folder.text().strip()
+            self.nas_browse_folder.setText("/".join(filter(None, (folder, choice["name"]))))
+
+    def load_groups(self):
+        self._root("list-groups", mode="group-list")
+
+    def _show_groups(self, raw: bytes):
+        result = json.loads(raw)
+        groups = result.get("groups")
+        if not isinstance(groups, list):
+            raise ValueError("Invalid Rivendell group list")
+        old = self.import_group.currentData()
+        self.import_group.clear()
+        self.import_group.addItem("Select a category", "")
+        for group in groups:
+            if re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,9}", group):
+                self.import_group.addItem(group, group)
+        prior = self.import_group.findData(old)
+        if prior > 0:
+            self.import_group.setCurrentIndex(prior)
+        else:
+            music = self.import_group.findData("MUSIC")
+            if music > 0:
+                self.import_group.setCurrentIndex(music)
+        self.groups_loaded = True
+
+    def browse_import_folders(self):
+        name = self.import_source.currentData()
+        if not name:
+            self._alert("Choose the NAS source first.")
+            return
+        if name != self.last_import_source:
+            self.import_folder = ""
+            self.last_import_source = name
+        self.execute(["rdcomplete-source-folders", "--source", name,
+                      "--folder", self.import_folder], "import-folders")
+
+    def _show_import_folders(self, raw: bytes):
+        result = json.loads(raw)
+        if not isinstance(result.get("folders"), list):
+            raise ValueError("Invalid source folders listing")
+        self.import_folder_path.setText(result["folder"] or "/ (entire source)")
+        self.import_folder_list.clear()
+        for folder in result["folders"]:
+            self.import_folder_list.addItem(folder)
+
+    def enter_import_folder(self, item):
+        if self.busy:
+            return
+        folder = item.text()
+        if folder in (".", "..") or "/" in folder or any(ord(c) < 32 for c in folder):
+            return
+        self.import_folder = "/".join(filter(None, (self.import_folder, folder)))
+        self.browse_import_folders()
+
+    def import_folder_parent(self):
+        if self.busy:
+            return
+        self.import_folder = "/".join(self.import_folder.split("/")[:-1])
+        self.browse_import_folders()
 
     def mount_nas(self):
         name = self.nas_name.text().strip()
@@ -543,7 +763,18 @@ class Console(QMainWindow):
         if not name:
             self._alert("Select a mounted source before scanning or importing.")
             return None
-        return [] if name == "legacy" else ["--name", name]
+        group = self.import_group.currentData()
+        if not group:
+            self._alert("Select a destination category. Create new categories in RDAdmin.")
+            return None
+        if name != self.last_import_source:
+            self.import_folder = ""
+            self.last_import_source = name
+            self.import_folder_path.clear()
+        args = [] if name == "legacy" else ["--name", name]
+        if self.import_folder:
+            args += ["--folder", self.import_folder]
+        return args, group
 
     def _render_mounts(self, raw: bytes):
         items = json.loads(raw)
@@ -573,24 +804,26 @@ class Console(QMainWindow):
             self.import_source.setCurrentIndex(1)
 
     def scan_import(self):
-        selected = self._mount_selection()
-        if selected is None:
+        selection = self._mount_selection()
+        if selection is None:
             return
+        selected, group = selection
         self.import_output.clear()
-        self._root("scan", ["--group", GROUP, *selected,
+        self._root("scan", ["--group", group, *selected,
                             "--limit", str(self.import_count.value())], mode="scan")
 
     def import_music(self):
-        selected = self._mount_selection()
-        if selected is None:
+        selection = self._mount_selection()
+        if selection is None:
             return
+        selected, group = selection
         if not self._confirm("Import music metadata",
-                "Register every supported new file in MUSIC? This creates cart records and "
+                f"Register supported new files into {group}? This creates cart records and "
                 "small local reference files, but does NOT modify music stored on the NAS.\n\n"
                 "RDAirPlay must be stopped. Existing carts will not be overwritten."):
             return
         self.import_output.clear()
-        self._root("import", ["--group", GROUP, *selected], mode="import")
+        self._root("import", ["--group", group, *selected], mode="import")
 
     def _write_catalog(self, raw: bytes):
         result = json.loads(raw)
