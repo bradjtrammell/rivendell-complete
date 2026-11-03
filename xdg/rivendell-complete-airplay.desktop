@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Rivendell Complete - AirPlay
+GenericName=Broadcast Playout with Listener Requests
+Exec=/usr/local/libexec/rivendell-complete/rdairplay-requests
+Icon=rdairplay
+Categories=Audio;AudioVideo;Qt;
+Terminal=false
+StartupNotify=true
