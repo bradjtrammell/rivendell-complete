@@ -85,6 +85,10 @@ else
   fi
 fi
 
+say 'Building and staging native RDAirPlay Requests integration'
+bash tools/install-airplay-requests.sh ||
+  fail 'Enhanced Requests panel failed validation; original AirPlay remains installed and unchanged.'
+
 say 'Verifying native packages and programs'
 command -v rdcomplete-control || fail 'Rivendell Complete operator console is missing'
 dpkg-query -W rivendell rivendell-webapi
