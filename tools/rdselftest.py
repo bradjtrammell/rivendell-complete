@@ -132,6 +132,26 @@ class Check:
                 self.add("nas-audio-readable", bool(first), first or "no accessible audio found")
             except (OSError, StopIteration) as exc:
                 self.add("nas-readonly", False, str(exc))
+        # External references are not themselves playable CAE audio cuts.
+        refs_value = cfg.get("ExternalAudio", "References", fallback="").strip()
+        if refs_value:
+            refs_dir = Path(refs_value)
+            native = Path("/var/snd")
+            try:
+                if refs_dir.is_symlink() or not refs_dir.is_dir() or native.is_symlink():
+                    raise OSError("Unsafe native audio/reference directory")
+                pointers = [p for p in refs_dir.glob("[0-9]" * 6 + "_001.ref")
+                            if not p.is_symlink()]
+                absent = 0
+                for pointer in pointers:
+                    cut = native / (pointer.stem + ".wav")
+                    if cut.is_symlink() or not cut.is_file() or cut.stat().st_size == 0:
+                        absent += 1
+                self.add("nas-carts-native-audio", bool(pointers) and absent == 0,
+                         f"{len(pointers)-absent}/{len(pointers)} imported carts have native audio; "
+                         f"{absent} unavailable (Repair existing audio in Control Center)")
+            except OSError as exc:
+                self.add("nas-carts-native-audio", False, str(exc))
         for name in ("rdairplay","jackd"):
             result=self.command("pgrep",["-x",name])
             self.add("running-"+name,result is not None and result.returncode==0,
