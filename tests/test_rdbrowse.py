@@ -31,7 +31,7 @@ class BrowseTests(unittest.TestCase):
         self.assertEqual(rdbrowse.share_name("RADIO_BROADCASTING/"), "RADIO_BROADCASTING")
         self.assertEqual(rdbrowse.share_name("Radio_Jingles"), "Radio_Jingles")
         shares = rdbrowse.parse_smb_shares(
-            "Disk|RADIO_BROADCASTING|Library\\nDisk|U1000|User music\\n")
+            "Disk|RADIO_BROADCASTING|Library\nDisk|U1000|User music\n")
         self.assertEqual([x["mountable"] for x in shares], [True, True])
         for invalid in ("RADIO_BROADCASTING/Albums", "music;malicious", "../bad", ""):
             with self.subTest(invalid=invalid), self.assertRaises(rdbrowse.BrowseError):
