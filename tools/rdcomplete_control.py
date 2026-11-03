@@ -360,6 +360,7 @@ class Console(QMainWindow):
         self.import_folder_list.itemDoubleClicked.connect(self.enter_import_folder)
         page.add(self.import_folder_list)
         actions = QHBoxLayout()
+        actions.addWidget(self.register(push("Audit existing NAS carts", self.audit_direct_audio, True)))
         actions.addWidget(self.register(push("Preview scan", self.scan_import)))
         actions.addWidget(self.register(push("Import all supported tracks", self.import_music, True)))
         page.layout_.addLayout(actions)
@@ -638,9 +639,12 @@ class Console(QMainWindow):
             except (ValueError, KeyError, TypeError):
                 pass
         if mode in ("mount", "mount-list", "nas-discovery", "group-list",
-                     "import-folders", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
+                     "import-folders", "import", "scan", "audit-direct-audio", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
+        if mode == "audit-direct-audio" and good:
+            output = bytes(self.output).decode("utf-8", "replace")
+            self.import_output.setPlainText(output)
         if mode in ("mount", "readiness") and good:
             QTimer.singleShot(0, self.refresh_mounts)
         if mode == "import" and good:
@@ -1008,6 +1012,9 @@ class Console(QMainWindow):
         self.pending_nas_mapping = (name, folder)
         self._root("mount-smb" if smb else "mount-nfs",
                    ["--source", src, "--name", name], creds, "mount")
+
+    def audit_direct_audio(self):
+        self._root("audit-direct-audio", mode="audit-direct-audio")
 
     def restart_daemon(self):
         if not self._confirm("Restart Rivendell audio services",
