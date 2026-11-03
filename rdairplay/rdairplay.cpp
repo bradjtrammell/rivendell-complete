@@ -1524,17 +1524,32 @@ void MainWidget::QueueListenerRequest(qlonglong request_id,int cart,
   if(!automatic&&QMessageBox::question(
       this,tr("Queue request"),
       tr("Add cart %1 to the main log before its next event? "
-         "The protected schedule must have time for this track.")
+         "This is an operator-directed change; confirm the next legal ID "
+         "and paid spots retain their scheduled times.")
         .arg(cart),QMessageBox::Yes|QMessageBox::No,
       QMessageBox::No)!=QMessageBox::Yes) {
+    return;
+  }
+  RDLogLine *immediate=air_log[0]->logLine(air_log[0]->nextLine());
+  if(immediate!=NULL&&immediate->timeType()==RDLogLine::Hard) {
+    if(!automatic) {
+      QMessageBox::warning(this,tr("Protected on-air event"),
+        tr("The next event is hard-timed. Schedule this request after the "
+           "protected event instead of pushing the legal ID or spot."));
+    }
     return;
   }
   QJsonObject reserve;
   QString error;
   QString id=QString::number(request_id);
   QString cart_arg=QString::number(cart);
-  if(!RunRequestCommand(QStringList()<<"reserve"<<"--id"<<id
-                        <<"--loaded-log"<<air_log[0]->logName(),&reserve,&error)) {
+  QStringList reserve_args;
+  reserve_args<<"reserve"<<"--id"<<id
+              <<"--loaded-log"<<air_log[0]->logName();
+  if(!automatic) {
+    reserve_args<<"--manual";
+  }
+  if(!RunRequestCommand(reserve_args,&reserve,&error)) {
     if(!automatic) {
       QMessageBox::warning(this,tr("Requests"),error);
     }

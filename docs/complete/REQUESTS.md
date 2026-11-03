@@ -49,3 +49,11 @@ restarting RDAirPlay resets the setting to OFF.
 and installed on the user's workstation. The native on-air queue action and
 actual played-status feedback need hardware acceptance. "Scheduled" is not
 the same as "Played."
+
+**Manual queueing** (operator actively clicks **Add to Main Log**) may
+insert an approved playable cart without a precomputed daily plan, after
+explicit confirmation and native ADD permission validation. It rejects an
+immediate hard-timed next event, and operators remain responsible for
+checking upcoming IDs and paid breaks. **Automatic queueing** never receives
+this manual override: it requires the committed protected date ledger AND
+a matching loaded Production log.

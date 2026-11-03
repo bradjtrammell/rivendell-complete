@@ -110,7 +110,8 @@ def eligible(store: Store, catalog: dict[int, dict],
 
 def request_eligible(store: Store, request_id: int,
                      catalog: dict[int, dict], loaded_log: str = "",
-                     plan_dir: Path = PLAN_DIR) -> tuple[int, dict]:
+                     plan_dir: Path = PLAN_DIR,
+                     manual: bool = False) -> tuple[int, dict]:
     candidates = [row for row in store.queue("approved", 500) if row["id"] == request_id]
     if not candidates:
         raise ConsoleError("Request is no longer approved")
@@ -120,18 +121,23 @@ def request_eligible(store: Store, request_id: int,
     if track is None:
         raise ConsoleError("Requested cart is missing from the playable music catalog")
     now = datetime.now().astimezone()
-    ledger = plan_dir / (now.date().isoformat() + ".plan.json")
-    hard = load_ledger(ledger, now)
-    validated_loaded_log(ledger, loaded_log)
-    if not eligible_window(now, int(track.get("length_ms") or 0), hard):
-        raise ConsoleError("Request would violate the protected on-air timing window")
+    if not manual:
+        ledger = plan_dir / (now.date().isoformat() + ".plan.json")
+        hard = load_ledger(ledger, now)
+        validated_loaded_log(ledger, loaded_log)
+        if not eligible_window(now, int(track.get("length_ms") or 0), hard):
+            raise ConsoleError("Request would violate the protected on-air timing window")
+    # Manual mode delegates actual insertion and permission checks to the
+    # foreground RDAirPlay operator. It is never used by the auto dispatcher.
     return cart, track
 
 
 def reserve(store: Store, request_id: int, catalog: dict[int, dict],
-            loaded_log: str = "", plan_dir: Path = PLAN_DIR) -> dict:
+            loaded_log: str = "", plan_dir: Path = PLAN_DIR,
+            manual: bool = False) -> dict:
     cart, track = request_eligible(store, request_id, catalog,
-                                   loaded_log=loaded_log, plan_dir=plan_dir)
+                                   loaded_log=loaded_log, plan_dir=plan_dir,
+                                   manual=manual)
     with store.connect() as db:
         if not claim(db, request_id, cart, int(time.time())):
             raise ConsoleError("Request already claimed or state changed")
@@ -177,7 +183,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cart", type=int)
     parser.add_argument("--plan-dir", type=Path, default=PLAN_DIR)
     parser.add_argument("--loaded-log", default="",
-                        help="Actual RDAirPlay main log name required for queueing")
+                        help="Actual RDAirPlay main log name required for auto queueing")
+    parser.add_argument("--manual", action="store_true",
+                        help="Only foreground operator-initiated insertions; no automatic use")
     args = parser.parse_args(argv)
     if args.id is not None and not 1 <= args.id <= 2**63 - 1:
         raise ConsoleError("Invalid request ID")
@@ -202,7 +210,8 @@ def main(argv: list[str] | None = None) -> int:
         result = {"candidate": candidate, "eligible": candidate is not None}
     elif args.action == "reserve":
         result = reserve(store, args.id, catalog,
-                         loaded_log=args.loaded_log, plan_dir=args.plan_dir)
+                         loaded_log=args.loaded_log, plan_dir=args.plan_dir,
+                         manual=args.manual)
     else:
         result = complete(store, args.id, args.cart, args.action == "complete")
     print(json.dumps(result, separators=(",", ":")))

@@ -117,6 +117,20 @@ class BridgeTests(unittest.TestCase):
         finally:
             bridge.datetime = original
 
+    def test_manual_request_requires_active_operator_and_not_daily_ledger(self):
+        request = self.store.submit(100001, "Listener", self.client,
+                                    {100001}, True, now=100)
+        with self.assertRaises(bridge.ConsoleError):
+            bridge.reserve(self.store, request["id"], self.catalog,
+                           loaded_log="", plan_dir=self.root / "missing")
+        result = bridge.reserve(self.store, request["id"], self.catalog,
+                                loaded_log="", plan_dir=self.root / "missing",
+                                manual=True)
+        self.assertEqual(result["status"], "reserved")
+        with self.assertRaises(bridge.ConsoleError):
+            bridge.reserve(self.store, request["id"], self.catalog,
+                           manual=True, plan_dir=self.root / "missing")
+
     def test_file_permissions_before_on_air_bridge(self):
         path = self.root / "catalog.json"
         path.write_text(json.dumps(list(self.catalog.values())))
