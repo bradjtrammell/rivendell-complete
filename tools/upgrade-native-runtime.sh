@@ -61,7 +61,7 @@ done
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 dpkg-deb -x "$main" "$work"
-[[ -x "$work/usr/bin/caed" ]] || die 'Native CAE missing from new package'
+[[ -x "$work/usr/sbin/caed" ]] || die 'Native CAE missing from new package'
 [[ -x "$work/usr/bin/rdairplay" ]] || die 'Native RDAirPlay missing from new package'
 lib="$(find "$work/usr/lib" -maxdepth 1 -type f -name 'librd-*.so*' -print -quit)"
 [[ -n "$lib" && -f "$lib" ]] || die 'Patched librd shared object missing'
@@ -89,7 +89,7 @@ fi
 say 'Reinstalling exact-version rebuilt native packages (maintainer hooks modify existing schema, never create)'
 sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall --no-install-recommends "$web" "$main" ||
   die "Package upgrade failed. Preserve snapshots at $backup for recovery."
-[[ -x /usr/bin/caed && -x /usr/bin/rdairplay ]] ||
+[[ -x /usr/sbin/caed && -x /usr/bin/rdairplay ]] ||
   die 'Required installed native binaries missing after upgrade'
 [[ -x /usr/bin/rdcomplete-control ]] ||
   die 'Control Center missing after upgrade'
