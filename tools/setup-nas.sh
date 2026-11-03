@@ -82,13 +82,13 @@ if awk -v source="$src" -v target="$mp" '
 fi
 
 if [[ "$proto" == --nfs ]]; then
-  if [[ "$(dpkg-query -W -f='\${Status}' nfs-common 2>/dev/null || :)" != 'install ok installed' ]]; then
+  if [[ "$(dpkg-query -W -f='${Status}' nfs-common 2>/dev/null || :)" != 'install ok installed' ]]; then
     DEBIAN_FRONTEND=noninteractive apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nfs-common
   fi
   options='ro,_netdev,nofail,x-systemd.automount,x-systemd.device-timeout=15s,hard,timeo=50,retrans=3'
 else
-  if [[ "$(dpkg-query -W -f='\${Status}' cifs-utils 2>/dev/null || :)" != 'install ok installed' ]]; then
+  if [[ "$(dpkg-query -W -f='${Status}' cifs-utils 2>/dev/null || :)" != 'install ok installed' ]]; then
     DEBIAN_FRONTEND=noninteractive apt-get update
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends cifs-utils
   fi
