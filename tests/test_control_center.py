@@ -80,7 +80,7 @@ class ControlCenterSafety(unittest.TestCase):
         self.assertIn("rdcomplete-browse", source)
         self.assertIn("rdcomplete-source-folders", source)
         self.assertIn("refresh_mounts", source)
-        self.assertIn('["--group", GROUP, *selected]', source)
+        self.assertIn('["--group", group, *selected]', source)
         self.assertIn("QMessageBox.question", source)
         self.assertIn('ROOT_HELPER = "/usr/local/libexec/rivendell-complete/rdcomplete_root.py"', source)
         self.assertIn("self._confirm(", source)
