@@ -68,6 +68,11 @@ def export_catalog(config_path: Path, groups: list[str]) -> list[dict]:
     result = []
     for cart, group, title, artist, album, length, validity in rows:
         cart = int(cart)
+        # CAE plays /var/snd WAV cuts; NAS .ref files only store provenance.
+        native_cut = Path("/var/snd") / f"{cart:06d}_001.wav"
+        if native_cut.is_symlink() or not native_cut.is_file() or native_cut.stat().st_size == 0:
+            print(f"SKIP cart {cart}: native playable audio missing", file=sys.stderr)
+            continue
         if root is not None:
             ref = mappings.get(cart)
             if ref:
