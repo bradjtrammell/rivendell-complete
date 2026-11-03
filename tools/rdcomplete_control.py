@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit,
+    QScrollArea, QSpinBox, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit,
     QVBoxLayout, QWidget,
 )
 
@@ -171,6 +171,13 @@ class Console(QMainWindow):
         self.statusBar().addPermanentWidget(self.progress)
         QTimer.singleShot(200, self.readiness)
 
+    def add_page(self, page: QWidget):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(page)
+        self.pages.addWidget(scroll)
+
     def register(self, button: QPushButton) -> QPushButton:
         self.buttons.append(button)
         return button
@@ -190,7 +197,7 @@ class Console(QMainWindow):
         page.layout_.addLayout(buttons)
         page.add(note("A working database, encoder installation and catalog do not by themselves prove audio reached the sound card or stream server."))
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _nas(self):
         page = Panel("Connect the music library",
@@ -257,7 +264,7 @@ class Console(QMainWindow):
                       "Multiple NFS and SMB sources can coexist. A legacy mount directly at /mnt/radio-music "
                       "must be migrated safely before adding named sources."))
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _nas_fields(self):
         smb = self.nas_protocol.currentText() == "SMB"
@@ -309,7 +316,7 @@ class Console(QMainWindow):
         self.import_output.setMinimumHeight(210)
         page.add(self.import_output)
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _requests(self):
         page = Panel("Listener requests",
@@ -334,7 +341,7 @@ class Console(QMainWindow):
         page.add(self.register(push("Open listener request page", self.open_listener, True)))
         page.add(note("Listener site: http://127.0.0.1:8787/requests (only on this machine). The station accepts submissions for moderation; external access requires a correctly secured TLS reverse proxy and client-specific rate limiting. Live insertion remains unqualified."))
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _stream(self):
         page = Panel("Streaming output",
@@ -369,7 +376,7 @@ class Console(QMainWindow):
         page.add(self.register(push("Start test encoder", self.start_stream, True)))
         page.add(note("You must select and verify the real capture routing first. Starting the encoder makes an outgoing source connection to your specified stream server."))
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _audio(self):
         page = Panel("Audio routing",
@@ -393,7 +400,7 @@ class Console(QMainWindow):
         page.add(self.register(push("Enable route reconnection", self.start_route, True)))
         page.add(note("An empty JACK graph means the audio server or RDAirPlay is not running. Do not guess port names."))
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _scheduling(self):
         page = Panel("Production scheduling",
@@ -412,7 +419,7 @@ class Console(QMainWindow):
                       "hourly grid, then preview before enabling the log timer. "
                       "Scheduling IDs and spots requires actual created carts."))
         page.finish()
-        self.pages.addWidget(page)
+        self.add_page(page)
 
     def _confirm(self, heading: str, detail: str) -> bool:
         return QMessageBox.question(self, heading, detail, QMessageBox.Yes | QMessageBox.No,

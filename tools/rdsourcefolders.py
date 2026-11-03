@@ -6,6 +6,9 @@ import argparse
 import json
 import os
 from pathlib import Path
+# The installed entrypoint is in /usr/local/bin; shared mount code is
+# installed under the root-owned libexec directory.
+sys.path.insert(0, "/usr/local/libexec/rivendell-complete")
 import stat
 import sys
 

@@ -79,6 +79,8 @@ class ControlCenterSafety(unittest.TestCase):
         self.assertIn("self.import_folder", source)
         self.assertIn("rdcomplete-browse", source)
         self.assertIn("rdcomplete-source-folders", source)
+        self.assertIn("QScrollArea", source)
+        self.assertIn("self.add_page(page)", source)
         self.assertIn("refresh_mounts", source)
         self.assertIn('["--group", group, *selected]', source)
         self.assertIn("QMessageBox.question", source)
