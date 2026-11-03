@@ -55,9 +55,9 @@ readelf -d "$lib" | grep -Fq '[librd-4.5.0.so]' ||
   fail 'New native shared library SONAME mismatch'
 readelf -d "$destlib" | grep -Fq '[librd-4.5.0.so]' ||
   fail 'Existing native shared library SONAME mismatch'
-strings "$gui" | grep -Fq 'Rivendell Complete - Listener Requests' ||
+strings "$gui" | grep -F 'Rivendell Complete - Listener Requests' >/dev/null ||
   fail 'Requests panel not compiled into RDAirPlay'
-nm -D "$lib" | grep -Fq playbackAudioFileName ||
+nm -D "$lib" | grep -F playbackAudioFileName >/dev/null ||
   fail 'External NAS playback resolver not compiled into native library'
 was_active=0
 if systemctl is-active --quiet rivendell; then was_active=1; fi
