@@ -135,7 +135,7 @@ def materialize(*, commit: bool, root: Path = SOURCES,
                 limit: int | None = None) -> dict:
     if os.geteuid() != 0:
         raise MaterializeError("Run as root to verify NAS and create native audio cuts")
-    if shutil.which("ffmpeg") != "/usr/bin/ffmpeg":
+    if not Path("/usr/bin/ffmpeg").is_file() or not os.access("/usr/bin/ffmpeg", os.X_OK):
         raise MaterializeError("Expected /usr/bin/ffmpeg is not installed")
     if subprocess.run(["/usr/bin/pgrep", "-x", "rdairplay"],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
