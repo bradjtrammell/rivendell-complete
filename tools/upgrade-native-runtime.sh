@@ -91,6 +91,13 @@ sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --reinstall --no-inst
   die "Package upgrade failed. Preserve snapshots at $backup for recovery."
 [[ -x /usr/sbin/caed && -x /usr/bin/rdairplay ]] ||
   die 'Required installed native binaries missing after upgrade'
+cmp -s "$work/usr/sbin/caed" /usr/sbin/caed ||
+  die "Installed CAE differs from rebuilt package; cannot claim patched playback"
+cmp -s "$work/usr/bin/rdairplay" /usr/bin/rdairplay ||
+  die "Installed RDAirPlay differs from rebuilt package"
+lib_installed="/${lib#"$work/"}"
+cmp -s "$lib" "$lib_installed" ||
+  die "Installed shared audio library differs from rebuilt native resolver"
 [[ -x /usr/bin/rdcomplete-control ]] ||
   die 'Control Center missing after upgrade'
 sudo systemctl is-active --quiet rivendell ||
