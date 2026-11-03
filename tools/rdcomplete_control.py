@@ -123,6 +123,7 @@ class Console(QMainWindow):
         self.import_folder = ""
         self.last_import_source = ""
         self.groups_loaded = False
+        self.pending_nas_mapping = None
 
         shell = QWidget()
         self.setCentralWidget(shell)
@@ -282,6 +283,7 @@ class Console(QMainWindow):
         self.import_source = QComboBox()
         self.import_source.addItem("Select a mounted source", "")
         form.addRow("NAS source", self.import_source)
+        self.import_source.currentIndexChanged.connect(self._source_changed)
         self.import_group = QComboBox()
         self.import_group.addItem("Load existing station groups", "")
         form.addRow("Import into category / group", self.import_group)
@@ -546,6 +548,16 @@ class Console(QMainWindow):
             except (ValueError, KeyError, TypeError) as exc:
                 good = False
                 self._alert(f"Could not browse source folders: {exc}")
+        if mode == "mount" and good and self.pending_nas_mapping:
+            try:
+                name, folder = self.pending_nas_mapping
+                self._save_source_folder(name, folder)
+            except (OSError, ValueError, RuntimeError) as exc:
+                self._alert(f"NAS mounted, but its default import folder could not be saved: {exc}")
+            finally:
+                self.pending_nas_mapping = None
+        if mode == "mount" and not good:
+            self.pending_nas_mapping = None
         if mode == "mount-list" and good:
             try:
                 self._render_mounts(bytes(self.output))
@@ -697,8 +709,7 @@ class Console(QMainWindow):
             self._alert("Choose the NAS source first.")
             return
         if name != self.last_import_source:
-            self.import_folder = ""
-            self.last_import_source = name
+            self._source_changed()
         self.execute(["rdcomplete-source-folders", "--source", name,
                       "--folder", self.import_folder], "import-folders")
 
@@ -726,6 +737,65 @@ class Console(QMainWindow):
         self.import_folder = "/".join(self.import_folder.split("/")[:-1])
         self.browse_import_folders()
 
+    def _load_source_folders(self):
+        target = CONFIG / "nas-source-folders.json"
+        if not target.exists() and not target.is_symlink():
+            return {}
+        info = target.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise RuntimeError("Unsafe NAS source folder settings; refusing to read")
+        obj = json.loads(target.read_text(encoding="utf-8"))
+        if not isinstance(obj, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                                            for k, v in obj.items()):
+            raise ValueError("Invalid saved NAS folder settings")
+        return obj
+
+    def _save_source_folder(self, name: str, folder: str):
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", name):
+            raise ValueError("Invalid source name")
+        if folder and (len(folder) > 1024 or
+                       any(not component or component in (".", "..") or
+                           any(ord(ch) < 32 or ord(ch) == 127 for ch in component)
+                           for component in folder.split("/"))):
+            raise ValueError("Invalid selected source folder")
+        if CONFIG.is_symlink():
+            raise RuntimeError("Unsafe configuration directory")
+        CONFIG.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if CONFIG.stat().st_uid != os.getuid() or CONFIG.stat().st_mode & 0o077:
+            raise RuntimeError("Station configuration directory owner or mode unsafe")
+        target = CONFIG / "nas-source-folders.json"
+        current = self._load_source_folders()
+        current[name] = folder
+        import tempfile
+        fd, temp = tempfile.mkstemp(prefix=".nas-source-", dir=CONFIG)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                os.fchmod(output.fileno(), 0o600)
+                json.dump(current, output, ensure_ascii=False, indent=2)
+                output.write("\n")
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temp, target)
+        finally:
+            if os.path.exists(temp):
+                os.unlink(temp)
+
+    def _source_changed(self):
+        name = self.import_source.currentData()
+        self.last_import_source = name or ""
+        self.import_folder = ""
+        if not name:
+            self.import_folder_path.clear()
+            return
+        try:
+            folder = self._load_source_folders().get(name, "")
+            if folder:
+                self.import_folder = folder
+            self.import_folder_path.setText(self.import_folder or "/ (entire source)")
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.import_folder_path.setText("Source folder settings unavailable")
+            self._alert(str(exc))
+
     def mount_nas(self):
         name = self.nas_name.text().strip()
         if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", name):
@@ -737,6 +807,13 @@ class Console(QMainWindow):
                    if smb else r"[A-Za-z0-9][A-Za-z0-9_.-]*:/[A-Za-z0-9_./-]+")
         if not re.fullmatch(pattern, src):
             self._alert("Enter a valid full NAS share/export path.")
+            return
+        folder = self.nas_browse_folder.text().strip()
+        if folder and (len(folder) > 1024 or
+                       any(not component or component in (".", "..") or
+                           any(ord(ch) < 32 or ord(ch) == 127 for ch in component)
+                           for component in folder.split("/"))):
+            self._alert("Choose a safe existing NAS subfolder, without parent traversal.")
             return
         creds = None
         if smb:
@@ -752,6 +829,7 @@ class Console(QMainWindow):
                 "No original audio files will be copied or modified."):
             return
         self.nas_password.clear()
+        self.pending_nas_mapping = (name, folder)
         self._root("mount-smb" if smb else "mount-nfs",
                    ["--source", src, "--name", name], creds, "mount")
 
@@ -775,9 +853,7 @@ class Console(QMainWindow):
             self._alert("Select a destination category. Create new categories in RDAdmin.")
             return None
         if name != self.last_import_source:
-            self.import_folder = ""
-            self.last_import_source = name
-            self.import_folder_path.clear()
+            self._source_changed()
         args = [] if name == "legacy" else ["--name", name]
         if self.import_folder:
             args += ["--folder", self.import_folder]
@@ -788,6 +864,7 @@ class Console(QMainWindow):
         if not isinstance(items, list):
             raise ValueError("Invalid NAS mount inventory")
         old = self.import_source.currentData()
+        self.import_source.blockSignals(True)
         self.import_source.clear()
         self.import_source.addItem("Select a mounted source", "")
         self.mount_table.setRowCount(len(items))
@@ -809,6 +886,8 @@ class Console(QMainWindow):
             self.import_source.setCurrentIndex(index)
         elif self.import_source.count() == 2:
             self.import_source.setCurrentIndex(1)
+        self.import_source.blockSignals(False)
+        self._source_changed()
 
     def scan_import(self):
         selection = self._mount_selection()
