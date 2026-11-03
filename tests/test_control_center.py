@@ -86,6 +86,18 @@ class ControlCenterSafety(unittest.TestCase):
                     gui._save_source_folder("archive", "../etc")
                 gui.close()
 
+    def test_native_airplay_staging_preserves_installed_packages(self):
+        source = (ROOT / "tools" / "install-airplay-requests.sh").read_text()
+        self.assertIn("strings \"$bin\"", source)
+        self.assertIn("readelf -h", source)
+        self.assertIn("ldd \"$bin\"", source)
+        self.assertIn("rdairplay-requests", source)
+        self.assertNotIn("dpkg -i", source)
+        self.assertNotIn("apt-get", source)
+        self.assertNotIn("rddbmgr", source)
+        self.assertNotIn("systemctl restart", source)
+        self.assertIn("/usr/bin/rdairplay", source)
+
     def test_controls_never_auto_start_broadcast(self):
         source = (ROOT / "tools" / "rdcomplete_control.py").read_text()
         self.assertIn("QProcess", source)

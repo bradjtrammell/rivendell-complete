@@ -419,6 +419,11 @@ class Console(QMainWindow):
     def launch(self, executable: str):
         if executable not in ("rdadmin", "rdairplay", "rdlogmanager", "rdlibrary", "rdlogedit"):
             return
+        if executable == "rdairplay":
+            enhanced = Path("/usr/local/libexec/rivendell-complete/rdairplay-requests")
+            if (enhanced.is_file() and not enhanced.is_symlink() and
+                    enhanced.stat().st_uid == 0 and os.access(enhanced, os.X_OK)):
+                executable = str(enhanced)
         result = QProcess.startDetached(executable, [])
         launched = result[0] if isinstance(result, tuple) else result
         if not launched:

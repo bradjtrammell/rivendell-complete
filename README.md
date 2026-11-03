@@ -161,6 +161,18 @@ RDAirPlay 4.5.0-1 executable.** It requires a new native package build and
 verified in-place upgrade. No successful physical playback/queue execution
 has been claimed; until qualified, treat this as development functionality.
 
+
+The enhanced RDAirPlay desktop executable has a separate guarded installer
+(`tools/install-airplay-requests.sh`) which only stages a verified,
+already-compiled native binary as
+`/usr/local/libexec/rivendell-complete/rdairplay-requests`. It does **not**
+reinstall the core Rivendell Debian package or invoke its automatic
+database modification, service stop or restart hooks. The Control Center
+prefers this separate enhanced executable when it is present and root-owned,
+and otherwise continues launching the original Rivendell RDAirPlay.
+Do not invoke this staging installer until a newly compiled binary has
+passed native build and runtime dependency checks.
+
 ### NAS discovery, categories and scheduling
 
 In **Music & NAS**, entering a hostname/IP and SMB credentials enables
