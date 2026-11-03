@@ -17,7 +17,7 @@ import sys
 import tempfile
 import wave
 
-from rdexternal import ImportFailure, media_path, references
+from rdexternal import ImportFailure, media_path, references, read_db_settings
 from rdmounts import mount_inventory
 
 REFS = Path("/var/lib/rivendell/external-media")
@@ -54,6 +54,34 @@ def destination(store: Path, cart: int) -> Path:
     if not 1 <= cart <= 999999:
         raise MaterializeError("Out-of-range Rivendell cart number")
     return store / f"{cart:06d}_001.wav"
+
+
+def is_native_pcm(target: Path) -> bool:
+    try:
+        if target.is_symlink() or not target.is_file():
+            return False
+        with wave.open(str(target), 'rb') as track:
+            return (track.getnchannels() == 2 and track.getsampwidth() == 2
+                    and track.getframerate() == 48000 and track.getnframes() >= 24000)
+    except (OSError, ValueError, wave.Error):
+        return False
+
+
+def sync_metadata(conn, cart: int) -> None:
+    cut = f'{cart:06d}_001'
+    with conn.cursor() as cur:
+        cur.execute('SELECT C.TYPE,T.CART_NUMBER FROM CART C '
+                    'JOIN CUTS T ON T.CUT_NAME=%s WHERE C.NUMBER=%s',
+                    (cut, cart))
+        row = cur.fetchone()
+        if row is None or int(row[0]) != 1 or int(row[1]) != cart:
+            raise MaterializeError(f'Cart {cart} lacks its indexed audio cut')
+        cur.execute('UPDATE CUTS SET CODING_FORMAT=0,SAMPLE_RATE=48000,'
+                    'BIT_RATE=1536000,CHANNELS=2 WHERE CUT_NAME=%s AND CART_NUMBER=%s',
+                    (cut, cart))
+        if cur.rowcount not in (0, 1):
+            raise MaterializeError('Audio cut metadata update was ambiguous')
+    conn.commit()
 
 
 def convert(source: Path, target: Path, store_info: os.stat_result,
@@ -123,8 +151,13 @@ def materialize(*, commit: bool, root: Path = SOURCES,
     if limit is not None and limit < 1:
         raise MaterializeError("Limit must be positive")
     stats = store.stat()
+    if commit:
+        import pymysql
+        conn = pymysql.connect(**read_db_settings(Path("/etc/rd.conf")))
+    else:
+        conn = None
     summary = {"referenced": len(records), "already_native": 0,
-               "missing_sources": 0, "pending": 0, "converted": 0, "failed": 0}
+               "missing_sources": 0, "pending": 0, "converted": 0, "reconciled": 0, "failed": 0}
     remaining = limit
     for relative, cart in sorted(records.items(), key=lambda pair: pair[1]):
         target = destination(store, cart)
@@ -134,6 +167,13 @@ def materialize(*, commit: bool, root: Path = SOURCES,
             if not target.is_file() or target.stat().st_size == 0:
                 raise MaterializeError(f"Unsafe or empty existing cut: {target}")
             summary["already_native"] += 1
+            if commit and is_native_pcm(target):
+                try:
+                    sync_metadata(conn, cart)
+                    summary["reconciled"] += 1
+                except (OSError, ValueError, MaterializeError) as exc:
+                    summary["failed"] += 1
+                    print(f"FAILED to reconcile cart {cart}: {exc}", file=sys.stderr)
             continue
         try:
             source = media_path(root, relative)
@@ -161,6 +201,7 @@ def materialize(*, commit: bool, root: Path = SOURCES,
             if shutil.disk_usage(store).free < expected:
                 raise MaterializeError("Insufficient native audio storage capacity")
             convert(source, target, stats)
+            sync_metadata(conn, cart)
             summary["converted"] += 1
         except (OSError, ValueError, KeyError, subprocess.TimeoutExpired,
                 MaterializeError) as exc:
@@ -170,6 +211,8 @@ def materialize(*, commit: bool, root: Path = SOURCES,
             remaining -= 1
         if summary["converted"] % 25 == 0 and summary["converted"] != 0:
             print(f"Converted {summary['converted']} cuts", flush=True)
+    if conn is not None:
+        conn.close()
     return summary
 
 
