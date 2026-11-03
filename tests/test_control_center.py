@@ -149,6 +149,20 @@ class ControlCenterSafety(unittest.TestCase):
                 self.assertEqual(gui.nas_browse_folder.text(), "RADIO_BROADCASTING")
             gui.close()
 
+    def test_native_upgrade_has_rollback_and_never_runs_package_hooks(self):
+        source = (ROOT / "tools" / "deploy-native-playback.sh").read_text()
+        self.assertIn("trap rollback EXIT", source)
+        self.assertIn("librd-4.5.0.so", source)
+        self.assertIn("cae/.libs/caed", source)
+        self.assertIn("rdairplay/.libs/rdairplay", source)
+        self.assertIn("readelf -h", source)
+        self.assertIn("sudo cp -a --", source)
+        self.assertIn("sudo cmp -s", source)
+        self.assertIn("pgrep -x rdairplay", source)
+        self.assertNotIn("dpkg -i", source)
+        self.assertNotIn("rddbmgr", source)
+        self.assertNotIn("make install", source)
+
     def test_native_airplay_staging_preserves_installed_packages(self):
         source = (ROOT / "tools" / "install-airplay-requests.sh").read_text()
         self.assertIn("strings \"$bin\"", source)
