@@ -183,6 +183,13 @@ fi
 credential_created=0
 fstab_changed=0
 trap - ERR
+# A NAS configured after the first desktop installation must still reconnect
+# after reboot and transient network outages; do not rely on an old timer state.
+if [[ -f /etc/systemd/system/rdcomplete-nas-restore.timer &&
+      -f /etc/systemd/system/rdcomplete-nas-restore.service ]]; then
+  systemctl enable --now rdcomplete-nas-restore.timer ||
+    die 'NAS mounted, but persistent boot/network recovery could not be enabled'
+fi
 printf 'NAS mounted and verified read-only: %s -> %s (%s)\n' "$src" "$mp" "$actual_type"
 printf 'Recovery copy of original fstab: %s\n' "$backup"
 if [[ "$mp" == /mnt/radio-music/* ]]; then
