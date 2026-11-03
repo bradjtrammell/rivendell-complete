@@ -149,6 +149,14 @@ class ControlCenterSafety(unittest.TestCase):
                 self.assertEqual(gui.nas_browse_folder.text(), "RADIO_BROADCASTING")
             gui.close()
 
+    def test_import_audit_requires_root_owned_sources_and_backups(self):
+        source = (ROOT / "tools" / "rdcomplete_audio_audit.py").read_text()
+        self.assertIn("create_recovery_copy", source)
+        self.assertIn("verify_nas_sources", source)
+        self.assertIn("Close RDAirPlay before repairing", source)
+        self.assertNotIn("DELETE FROM CART", source)
+        self.assertNotIn("DELETE FROM CUTS", source)
+
     def test_native_upgrade_has_rollback_and_never_runs_package_hooks(self):
         source = (ROOT / "tools" / "deploy-native-playback.sh").read_text()
         self.assertIn("trap rollback EXIT", source)

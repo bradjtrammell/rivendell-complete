@@ -20,7 +20,7 @@ source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Requires Ubuntu 26.04'
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas.sh \
-            tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdcomplete_nas_restore.py tools/rdcomplete_schedule_ui.py tools/rdbrowse.py tools/rdsourcefolders.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py \
+            tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdcomplete_audio_audit.py tools/rdcomplete_nas_restore.py tools/rdcomplete_schedule_ui.py tools/rdbrowse.py tools/rdsourcefolders.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py \
             systemd/rdcomplete-nas-restore.service systemd/rdcomplete-nas-restore.timer \
             xdg/rivendell-complete.desktop; do
   [[ -f "$ROOT/$path" && ! -L "$ROOT/$path" ]] || fail "Missing or symlinked source: $path"
@@ -52,7 +52,7 @@ if (( SKIP_PACKAGES == 0 )); then
 fi
 sudo -v
 sudo install -d -o root -g root -m 0755 /usr/local/libexec/rivendell-complete
-for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py rdcomplete_nas_restore.py \
+for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py rdcomplete_audio_audit.py rdcomplete_nas_restore.py \
             rdrequest_ops.py rdrequests.py rdlive.py; do
   sudo install -o root -g root -m 0755 "$ROOT/tools/$name" "/usr/local/libexec/rivendell-complete/$name"
 done
