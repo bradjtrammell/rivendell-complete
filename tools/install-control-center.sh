@@ -20,7 +20,7 @@ source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Requires Ubuntu 26.04'
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 for path in tools/rdcomplete_control.py tools/rdcomplete_root.py tools/setup-nas.sh \
-            tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py xdg/rivendell-complete.desktop; do
+            tools/rdexternal.py tools/rdcatalog.py tools/rdmounts.py tools/rdbrowse.py tools/rdsourcefolders.py tools/rdrequest_ops.py tools/rdrequests.py tools/rdlive.py tools/upgrade-request-portal.py xdg/rivendell-complete.desktop; do
   [[ -f "$ROOT/$path" && ! -L "$ROOT/$path" ]] || fail "Missing or symlinked source: $path"
 done
 if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/null ||
@@ -36,7 +36,18 @@ if ! /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' 2>/dev/nul
 fi
 command -v pkexec >/dev/null || fail 'The polkit pkexec command is missing'
 /usr/bin/python3 -c 'from PyQt5 import QtWidgets, QtCore, QtGui' || fail 'PyQt5 import failed'
-/usr/bin/python3 -m py_compile "$ROOT/tools/rdcomplete_control.py" "$ROOT/tools/rdcomplete_root.py"
+/usr/bin/python3 -m py_compile "$ROOT/tools/rdcomplete_control.py" "$ROOT/tools/rdcomplete_root.py" "$ROOT/tools/rdbrowse.py" "$ROOT/tools/rdsourcefolders.py" "$ROOT/tools/rdrequest_ops.py"
+if (( SKIP_PACKAGES == 0 )); then
+  missing_tools=()
+  command -v smbclient >/dev/null || missing_tools+=(smbclient)
+  command -v showmount >/dev/null || missing_tools+=(nfs-common)
+  if (( ${#missing_tools[@]} > 0 )); then
+    sudo -v
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get \
+      -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${missing_tools[@]}" ||
+      fail 'Could not install NAS discovery dependencies'
+  fi
+fi
 sudo -v
 sudo install -d -o root -g root -m 0755 /usr/local/libexec/rivendell-complete
 for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py
@@ -48,6 +59,10 @@ sudo install -o root -g root -m 0755 "$ROOT/tools/rdcomplete_root.py" \
 # Expose read-only mount inventory to the GUI without a root prompt.
 sudo install -o root -g root -m 0755 "$ROOT/tools/rdmounts.py" \
   /usr/local/bin/rdcomplete-mounts
+sudo install -o root -g root -m 0755 "$ROOT/tools/rdbrowse.py" \
+  /usr/local/bin/rdcomplete-browse
+sudo install -o root -g root -m 0755 "$ROOT/tools/rdsourcefolders.py" \
+  /usr/local/bin/rdcomplete-source-folders
 sudo install -o root -g root -m 0755 "$ROOT/tools/rdrequest_ops.py" \
   /usr/local/bin/rdcomplete-request-ops
 sudo install -o root -g root -m 0755 "$ROOT/tools/rdcomplete_control.py" \
