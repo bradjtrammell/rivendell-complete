@@ -164,6 +164,7 @@ class Console(QMainWindow):
         self.progress.hide()
         self.statusBar().addPermanentWidget(self.progress)
         QTimer.singleShot(200, self.readiness)
+        QTimer.singleShot(1500, self.refresh_mounts)
 
     def register(self, button: QPushButton) -> QPushButton:
         self.buttons.append(button)
@@ -189,8 +190,21 @@ class Console(QMainWindow):
     def _nas(self):
         page = Panel("Connect the music library",
             "Original audio stays on the NAS. Rivendell mounts the share read-only, stores only metadata and references on the local disk, and refuses to replace an existing share.")
-        box = QGroupBox("Read-only NAS connection")
+        self.mount_table = QTableWidget(0, 5)
+        self.mount_table.setHorizontalHeaderLabels(
+            ["Name", "Protocol", "Remote share", "Local mount", "Status"])
+        self.mount_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.mount_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.mount_table.horizontalHeader().setStretchLastSection(True)
+        self.mount_table.setMinimumHeight(145)
+        page.add(self.mount_table)
+        page.add(self.register(push("Refresh mounted sources", self.refresh_mounts, True)))
+        box = QGroupBox("Add another read-only NFS or SMB source")
         form = QFormLayout(box)
+        self.nas_name = QLineEdit()
+        self.nas_name.setPlaceholderText("e.g. current, archive, imaging")
+        self.nas_name.setMaxLength(32)
+        form.addRow("Unique source name", self.nas_name)
         self.nas_protocol = QComboBox()
         self.nas_protocol.addItems(["NFS", "SMB"])
         form.addRow("Protocol", self.nas_protocol)
@@ -209,7 +223,9 @@ class Console(QMainWindow):
         page.add(note("A system authentication dialog will ask permission to mount the NAS. SMB credentials are never included in command arguments or displayed in activity logs."))
         page.add(self.register(push("Connect and configure source", self.mount_nas)))
         page.add(self.register(push("Apply configuration to audio daemon", self.restart_daemon, True)))
-        page.add(note("If the share is already mounted read-only at /mnt/radio-music, existing settings are preserved. Different mounts must be reviewed manually."))
+        page.add(note("Each source mounts at /mnt/radio-music/NAME. Its original audio stays on that NAS. "
+                      "Multiple NFS and SMB sources can coexist. A legacy mount directly at /mnt/radio-music "
+                      "must be migrated safely before adding named sources."))
         page.finish()
         self.pages.addWidget(page)
 
@@ -224,8 +240,11 @@ class Console(QMainWindow):
         self.import_count = QSpinBox()
         self.import_count.setRange(1, 500)
         self.import_count.setValue(25)
-        box = QGroupBox("Source: /mnt/radio-music   →   Rivendell group: MUSIC")
+        box = QGroupBox("Select one existing source · Destination group: MUSIC")
         form = QFormLayout(box)
+        self.import_source = QComboBox()
+        self.import_source.addItem("Select a mounted source", "")
+        form.addRow("NAS source", self.import_source)
         form.addRow("Preview up to", self.import_count)
         page.add(box)
         actions = QHBoxLayout()
@@ -443,6 +462,12 @@ class Console(QMainWindow):
         for button in self.buttons:
             button.setEnabled(True)
         self.status.setText(f"{mode}: {'completed' if good else 'failed (exit '+str(code)+')'}")
+        if mode == "mount-list" and good:
+            try:
+                self._render_mounts(bytes(self.output))
+            except (ValueError, KeyError, TypeError) as exc:
+                good = False
+                self._alert(f"NAS source inventory invalid: {exc}")
         if mode == "catalog" and good:
             try:
                 self._write_catalog(bytes(self.output))
@@ -458,9 +483,11 @@ class Console(QMainWindow):
                 self.health.setPlainText(summary)
             except (ValueError, KeyError, TypeError):
                 pass
-        if mode in ("mount", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
+        if mode in ("mount", "mount-list", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
+        if mode == "mount" and good:
+            QTimer.singleShot(0, self.refresh_mounts)
         if mode == "import" and good:
             QMessageBox.information(self, "Music import completed",
                                     "Import finished. Export an updated request catalog on the Listener requests page.")
@@ -474,6 +501,10 @@ class Console(QMainWindow):
         self.execute(["rdcomplete-selftest", "--json"], "readiness")
 
     def mount_nas(self):
+        name = self.nas_name.text().strip()
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", name):
+            self._alert("Enter a unique source name (lowercase a-z, digits, - or _, starting with a letter).")
+            return
         src = self.nas_source.text().strip()
         smb = self.nas_protocol.currentText() == "SMB"
         pattern = (r"//[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_./-]+"
@@ -489,12 +520,14 @@ class Console(QMainWindow):
                 self._alert("SMB username/password invalid or missing.")
                 return
             creds = f"{user}\n{password}\n".encode()
-        if not self._confirm("Connect NAS read-only",
-                f"Mount {src} read-only and configure original-path audio references?\n\n"
-                "No source audio files will be copied or modified."):
+        if not self._confirm("Add read-only NAS source",
+                f"Add '{name}' from {src} at /mnt/radio-music/{name}?\n\n"
+                "Every source keeps its own read-only mount and credentials. "
+                "No original audio files will be copied or modified."):
             return
         self.nas_password.clear()
-        self._root("mount-smb" if smb else "mount-nfs", ["--source", src], creds, "mount")
+        self._root("mount-smb" if smb else "mount-nfs",
+                   ["--source", src, "--name", name], creds, "mount")
 
     def restart_daemon(self):
         if not self._confirm("Restart Rivendell audio services",
@@ -503,18 +536,61 @@ class Console(QMainWindow):
             return
         self._root("restart-audio", mode="restart-audio")
 
+    def refresh_mounts(self):
+        self.execute(["rdcomplete-mounts", "--json"], "mount-list")
+
+    def _mount_selection(self):
+        name = self.import_source.currentData()
+        if not name:
+            self._alert("Select a mounted source before scanning or importing.")
+            return None
+        return [] if name == "legacy" else ["--name", name]
+
+    def _render_mounts(self, raw: bytes):
+        items = json.loads(raw)
+        if not isinstance(items, list):
+            raise ValueError("Invalid NAS mount inventory")
+        old = self.import_source.currentData()
+        self.import_source.clear()
+        self.import_source.addItem("Select a mounted source", "")
+        self.mount_table.setRowCount(len(items))
+        for r, item in enumerate(items):
+            for c, value in enumerate([
+                item["name"], item["protocol"], item["source"], item["path"],
+                "Read-only · Online" if item["readonly"] else "Offline / Unsafe",
+            ]):
+                cell = QTableWidgetItem(str(value))
+                cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
+                self.mount_table.setItem(r, c, cell)
+            if item["readonly"] and item["mounted"]:
+                self.import_source.addItem(
+                    f'{item["name"]} · {item["protocol"]} · {item["source"]}',
+                    item["name"])
+        index = self.import_source.findData(old)
+        if index > 0:
+            self.import_source.setCurrentIndex(index)
+        elif self.import_source.count() == 2:
+            self.import_source.setCurrentIndex(1)
+
     def scan_import(self):
+        selected = self._mount_selection()
+        if selected is None:
+            return
         self.import_output.clear()
-        self._root("scan", ["--group", GROUP, "--limit", str(self.import_count.value())], mode="scan")
+        self._root("scan", ["--group", GROUP, *selected,
+                            "--limit", str(self.import_count.value())], mode="scan")
 
     def import_music(self):
+        selected = self._mount_selection()
+        if selected is None:
+            return
         if not self._confirm("Import music metadata",
                 "Register every supported new file in MUSIC? This creates cart records and "
                 "small local reference files, but does NOT modify music stored on the NAS.\n\n"
                 "RDAirPlay must be stopped. Existing carts will not be overwritten."):
             return
         self.import_output.clear()
-        self._root("import", ["--group", GROUP], mode="import")
+        self._root("import", ["--group", GROUP, *selected], mode="import")
 
     def _write_catalog(self, raw: bytes):
         result = json.loads(raw)
