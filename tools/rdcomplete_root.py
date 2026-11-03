@@ -172,7 +172,6 @@ def main(argv: list[str] | None = None) -> int:
     schedule.add_argument("--jingle-cart", type=int, default=0)
     schedule.add_argument("--fill-cart", type=int, default=0)
     commands.add_parser("restart-audio")
-    commands.add_parser("materialize-audio")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
@@ -230,16 +229,6 @@ def main(argv: list[str] | None = None) -> int:
         subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", "rivendell"],
                        check=True, timeout=15)
         print("Rivendell audio daemon restarted with the NAS configuration")
-    elif args.action == "materialize-audio":
-        verify_sources()
-        script = HERE / "rdcomplete_materialize.py"
-        if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
-            raise CommissionError("Native audio recovery tool is missing or not root-owned")
-        result = subprocess.run(
-            ["/usr/bin/python3", str(script), "--commit"],
-            check=False, timeout=21600)
-        if result.returncode:
-            raise CommissionError("Audio materialization incomplete; retry safely after correcting errors")
     elif args.action == "list-groups":
         script = HERE / "rdexternal.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
@@ -355,15 +344,6 @@ def main(argv: list[str] | None = None) -> int:
         proc = subprocess.run(cmd, check=False, timeout=3600)
         if proc.returncode:
             raise CommissionError(f"{args.action} failed (exit {proc.returncode}); review the output")
-        if args.action == "import":
-            native = HERE / "rdcomplete_materialize.py"
-            if native.is_symlink() or not native.is_file() or native.stat().st_uid != 0:
-                raise CommissionError("Native audio conversion tool is missing or unsafe")
-            result = subprocess.run(
-                ["/usr/bin/python3", str(native), "--commit"],
-                check=False, timeout=21600)
-            if result.returncode:
-                raise CommissionError("Catalog indexed but native audio incomplete. Existing cuts are preserved.")
     return 0
 
 
