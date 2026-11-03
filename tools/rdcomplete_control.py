@@ -19,6 +19,7 @@ from urllib import error, request
 from urllib.parse import urlsplit
 
 from PyQt5.QtCore import Qt, QProcess, QTimer
+from rdcomplete_schedule_ui import SchedulePanel
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
@@ -405,22 +406,7 @@ class Console(QMainWindow):
         self.add_page(page)
 
     def _scheduling(self):
-        page = Panel("Production scheduling",
-            "Protect the existing Production service and schedule. Inspect the generated commands before enabling the recurring timer.")
-        page.add(self.register(push("Preview next seven days", lambda: self.execute(
-            ["rdcomplete-loggen", "--service", SERVICE, "--days", "7", "--dry-run"], "schedule-preview"))))
-        page.add(self.register(push("Enable future log timer", self.enable_schedule, True)))
-        page.add(note("Enabling scheduling requires configured grids, clocks, legal IDs and playable carts in RDLogManager. This tool is not continuous live backtiming."))
-        page.add(self.register(push(
-            "Manage music/jingle rotations & hourly clocks (RDLogManager)",
-            lambda: self.launch("rdlogmanager"), True)))
-        page.add(self.register(push("Review and edit generated logs (RDLogEdit)",
-                            lambda: self.launch("rdlogedit"), True)))
-        page.add(note("Your imported Rivendell groups become scheduling categories. In RDLogManager, "
-                      "create category rules and clocks, assign them to your Production service's "
-                      "hourly grid, then preview before enabling the log timer. "
-                      "Scheduling IDs and spots requires actual created carts."))
-        page.finish()
+        page = SchedulePanel(self)
         self.add_page(page)
 
     def _confirm(self, heading: str, detail: str) -> bool:
