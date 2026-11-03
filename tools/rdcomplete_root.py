@@ -47,6 +47,9 @@ def verify_mount(name: str | None = None) -> str:
         raise CommissionError(str(exc)) from exc
     if MOUNT.is_symlink() or target.is_symlink() or not target.is_dir():
         raise CommissionError(f"NAS mountpoint is missing or a symlink: {target}")
+    # Wake a configured systemd automount without writing any source data.
+    # This intentionally fails if the NAS is unavailable.
+    (target / ".").stat()
     # Inspect the exact mountpoint rather than a containing parent filesystem.
     result = subprocess.run(
         ["/usr/bin/findmnt", "-rn", "-M", str(target), "-o", "SOURCE,FSTYPE,OPTIONS"],
@@ -79,8 +82,24 @@ def verify_sources() -> None:
 
 
 
+def _source_available(item: dict) -> bool:
+    try:
+        name = None if item["legacy"] else item["name"]
+        return verify_mount(name) == item["source"]
+    except (CommissionError, OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def configure_external() -> None:
-    verify_sources()
+    items = fstab_mounts()
+    if items:
+        if any(not item["readonly_configured"] for item in items):
+            raise CommissionError("A configured NAS source is not read-only")
+        # Do not require an unrelated NAS to be online to add a new share.
+        if not any(_source_available(item) for item in items):
+            raise CommissionError("No configured NFS/SMB source is online")
+    else:
+        verify_mount()
     if not CONF.is_file() or CONF.is_symlink() or os.path.realpath("/etc/rd.conf") != str(CONF):
         raise CommissionError("Unexpected Rivendell configuration layout; refusing to edit it")
     p = configparser.RawConfigParser()

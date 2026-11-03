@@ -23,7 +23,7 @@ class MountError(ValueError):
 
 
 def mount_path(name: str) -> Path:
-    if not isinstance(name, str) or NAME.fullmatch(name) is None:
+    if not isinstance(name, str) or NAME.fullmatch(name) is None or name == "legacy":
         raise MountError("Source name must be 1-32 lowercase letters, numbers, - or _, starting with a letter")
     return ROOT / name
 
@@ -49,7 +49,7 @@ def fstab_mounts(fstab: Path = Path("/etc/fstab"), root: Path = ROOT) -> list[di
             name = "legacy"
         elif target.startswith(str(root) + "/"):
             name = target[len(str(root)) + 1:]
-            if NAME.fullmatch(name) is None:
+            if NAME.fullmatch(name) is None or name == "legacy":
                 continue
         else:
             continue
@@ -90,6 +90,18 @@ def mount_inventory(fstab: Path = Path("/etc/fstab"), root: Path = ROOT,
         item["mounted"] = False
         item["readonly"] = False
         if probe:
+            # systemd may have mounted only its autofs trigger following boot.
+            # A bounded stat wakes the real NFS/CIFS mount before findmnt.
+            # Never write to the source or follow symlinks in the collection.
+            if item["readonly_configured"]:
+                try:
+                    subprocess.run(
+                        ["/usr/bin/stat", "--", item["path"] + "/."],
+                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL, timeout=5, check=False,
+                    )
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
             source, fstype, read_only = mounted_details(Path(item["path"]))
             item["mounted"] = (
                 source == item["source"]

@@ -143,8 +143,9 @@ printf '\n# Rivendell Complete original audio: READ ONLY\n%s %s %s %s 0 0\n' \
   "$src" "$mp" "$fstype" "$options" >> "$temp"
 chmod 0644 "$temp"
 if [[ "$mp" == /mnt/radio-music/* ]]; then
-  mkdir -p /mnt/radio-music
-  chmod 0755 /mnt/radio-music
+  if [[ ! -d /mnt/radio-music ]]; then
+    install -d -m 0755 /mnt/radio-music
+  fi
 fi
 mkdir -p "$mp"
 mv -f "$temp" /etc/fstab

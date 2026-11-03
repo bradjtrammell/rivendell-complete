@@ -164,7 +164,6 @@ class Console(QMainWindow):
         self.progress.hide()
         self.statusBar().addPermanentWidget(self.progress)
         QTimer.singleShot(200, self.readiness)
-        QTimer.singleShot(1500, self.refresh_mounts)
 
     def register(self, button: QPushButton) -> QPushButton:
         self.buttons.append(button)
@@ -486,7 +485,7 @@ class Console(QMainWindow):
         if mode in ("mount", "mount-list", "import", "scan", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
-        if mode == "mount" and good:
+        if mode in ("mount", "readiness") and good:
             QTimer.singleShot(0, self.refresh_mounts)
         if mode == "import" and good:
             QMessageBox.information(self, "Music import completed",
@@ -562,9 +561,11 @@ class Console(QMainWindow):
                 cell = QTableWidgetItem(str(value))
                 cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
                 self.mount_table.setItem(r, c, cell)
-            if item["readonly"] and item["mounted"]:
+            if item["readonly_configured"] and not item["legacy"] or (
+                    item["legacy"] and item["readonly_configured"]):
                 self.import_source.addItem(
-                    f'{item["name"]} · {item["protocol"]} · {item["source"]}',
+                    f'{item["name"]} · {item["protocol"]} · {item["source"]}' +
+                    ("" if item["readonly"] else " · offline (check before import)"),
                     item["name"])
         index = self.import_source.findData(old)
         if index > 0:
