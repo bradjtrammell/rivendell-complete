@@ -76,7 +76,7 @@ while IFS= read -r p; do
   if [[ -z "$p" ]]; then
     continue
   fi
-  candidate="$(apt-cache policy "$p" | awk '/Candidate:/ {print $2;exit}')"
+  candidate="$(apt-cache policy "$p" | awk '/Candidate:/ {if (!found) {print $2; found=1}}')"
   if [[ -z "$candidate" || "$candidate" == '(none)' ]]; then
     missing+=("$p")
   fi
@@ -108,7 +108,134 @@ for package in "$PKG" "$PKG_WEB"; do
   [[ "$(dpkg-deb -f "$package" Architecture)" == amd64 ]] || fail "Wrong architecture: $package"
   [[ "$(dpkg-deb -f "$package" Version)" == 4.5.0-1 ]] || fail "Wrong version: $package"
 done
-dpkg-deb --contents "$PKG" | grep '/usr/bin/rdairplay$' >/dev/null ||
+dpkg-deb --contents "$PKG" | grep '/usr/bin/rdairplay
+  fail 'Main package is missing RDAirPlay'
+[[ "$(dpkg-deb -f "$PKG" Package)" == rivendell ]] || fail 'Wrong main package name'
+[[ "$(dpkg-deb -f "$PKG_WEB" Package)" == rivendell-webapi ]] || fail 'Wrong webapi package name'
+if [[ "$MODE" == build ]]; then
+  log "Built $PKG. No Rivendell database/application installed."
+  exit 0
+fi
+
+log 'Reauthenticating sudo before package installation; long builds expire sudo timestamps'
+sudo -v || fail 'sudo authentication failed; compiled .deb files remain intact'
+
+# Classify previous installation state WITHOUT changing existing files.
+# A fresh install has no configuration, database or installed packages.
+# A resumable install must have OUR marker, OUR exact config symlink and
+# an existing but EMPTY schema, so postinst --create cannot overwrite tables.
+# A complete install must have the expected packages and nonempty schema.
+# Any other state is deliberately left untouched for manual inspection.
+RESUME_STAGED=0
+if [[ "$MODE" == install ]]; then
+  rd_conf=/etc/rd.conf
+  rd_default=/etc/rivendell.d/rd-default.conf
+  rd_marker=/etc/rivendell.d/rdcomplete-first-install
+  has_conf=0
+  [[ -e "$rd_conf" || -L "$rd_conf" || -e "$rd_default" ]] && has_conf=1
+  pkg_ready=0
+  web_ready=0
+  [[ "$(dpkg-query -W -f='${Status} ${Version}' rivendell 2>/dev/null || :)" == "install ok installed 4.5.0-1" ]] && pkg_ready=1
+  [[ "$(dpkg-query -W -f='${Status} ${Version}' rivendell-webapi 2>/dev/null || :)" == "install ok installed 4.5.0-1" ]] && web_ready=1
+
+  if (( has_conf == 1 )); then
+    [[ -L "$rd_conf" && "$(readlink "$rd_conf")" == "$rd_default" &&
+       -f "$rd_default" ]] ||
+      fail 'Unrecognized existing Rivendell config; no files changed. Check /etc/rd.conf and /etc/rivendell.d.'
+    [[ "$(sudo -n stat -c '%a' "$rd_default")" == 640 ]] ||
+      fail 'Existing Rivendell configuration has unexpected permissions; no files changed'
+    [[ "$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'" 2>/dev/null || :)" == 1 ]] ||
+      fail 'Configuration exists but the local Rivendell database is missing or inaccessible; no files changed'
+    table_count="$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='Rivendell'")" ||
+      fail 'Cannot inspect existing Rivendell database tables; no files changed'
+    [[ "$table_count" =~ ^[0-9]+$ ]] || fail 'Unexpected schema table count; no files changed'
+
+    if (( pkg_ready == 1 && web_ready == 1 )) && (( table_count > 0 )) &&
+       [[ ! -e "$rd_marker" ]]; then
+      log 'Rivendell and the database are already installed; preserving both and skipping reinstallation'
+      exit 0
+    fi
+    if [[ -f "$rd_marker" ]] && (( table_count == 0 )) &&
+       (( pkg_ready == 0 )); then
+      RESUME_STAGED=1
+      log 'Verified interrupted first install: matching config, empty database, and first-install marker'
+    else
+      fail 'Unrecognized partial Rivendell installation; preserving configuration and database for inspection'
+    fi
+  elif (( pkg_ready == 1 || web_ready == 1 )); then
+    fail 'Rivendell package is installed without its expected configuration; no files changed'
+  elif [[ "$(sudo -n mariadb -NBe "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'" 2>/dev/null || echo 0)" != 0 ]]; then
+    fail 'Existing Rivendell schema detected without configuration; no files changed'
+  fi
+fi
+
+# Validate the COMPLETE package transaction BEFORE creating users, databases
+# or configuration. A dependency failure must not leave a partial station.
+PLAN="$(sudo -n apt-get -s install "$PKG_WEB" "$PKG")" ||
+  fail 'APT dependency simulation failed after authentication; inspect the APT error above'
+if grep -q '^Remv ' <<<"$PLAN"; then
+  printf '%s\n' "$PLAN" >&2
+  fail 'Refusing package removal during station initialization'
+fi
+
+if (( RESUME_STAGED == 1 )); then
+  log 'Preserving staged database and credentials; resuming only the pending Debian package transaction'
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$PKG_WEB" "$PKG"
+  for exe in rdadmin rdairplay rdlibrary rdlogmanager rdimport rddbmgr; do
+    command -v "$exe" >/dev/null || fail "Installed executable missing: $exe"
+  done
+  log 'Interrupted Rivendell installation resumed; schema and service created by package postinst'
+  exit 0
+fi
+
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mariadb-server
+sudo systemctl enable --now mariadb
+SCHEMA="$(sudo mariadb -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='Rivendell'")"
+[[ -z "$SCHEMA" ]] || fail 'Existing Rivendell DB detected; refusing overwrite'
+for account in rivendell pypad; do
+  getent group "$account" >/dev/null || sudo groupadd --system "$account"
+  id -u "$account" >/dev/null 2>&1 || sudo useradd --system --gid "$account" --shell /usr/sbin/nologin --home-dir /nonexistent "$account"
+done
+DB_SECRET="$(openssl rand -hex 32)"
+SERVICE_SECRET="$(openssl rand -hex 32)"
+[[ -n "$DB_SECRET" && -n "$SERVICE_SECRET" ]] || fail 'Secure random generation failed'
+sudo mariadb <<SQL
+CREATE DATABASE \`Rivendell\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+CREATE USER IF NOT EXISTS 'rduser'@'localhost' IDENTIFIED BY '$DB_SECRET';
+ALTER USER 'rduser'@'localhost' IDENTIFIED BY '$DB_SECRET';
+GRANT ALL PRIVILEGES ON \`Rivendell\`.* TO 'rduser'@'localhost';
+SQL
+sudo install -d -o root -g rivendell -m 0750 /etc/rivendell.d
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+RD_DB_SECRET="$DB_SECRET" RD_SERVICE_SECRET="$SERVICE_SECRET" python3 - "$ROOT/conf/rd.conf-sample" "$TMP" <<'PY'
+import os, re, sys
+from pathlib import Path
+s = Path(sys.argv[1]).read_text()
+for section, name in (("Identity", "RD_SERVICE_SECRET"), ("mySQL", "RD_DB_SECRET")):
+    m = re.search(r"(?ms)^\[" + re.escape(section) + r"\]\n(.*?)(?=^\[|\Z)", s)
+    if m is None:
+        raise SystemExit("Configuration section missing: " + section)
+    body, n = re.subn(r"(?m)^Password=.*$", lambda _: "Password=" + os.environ[name], m.group(1))
+    if n != 1:
+        raise SystemExit("Unexpected upstream password configuration")
+    s = s[:m.start(1)] + body + s[m.end(1):]
+s = s.replace(";Engine=MyISAM", "Engine=InnoDB")
+Path(sys.argv[2]).write_text(s)
+PY
+sudo install -o root -g rivendell -m 0640 "$TMP" /etc/rivendell.d/rd-default.conf
+sudo ln -s /etc/rivendell.d/rd-default.conf /etc/rd.conf
+sudo install -o root -g root -m 0600 /dev/null /etc/rivendell.d/rdcomplete-first-install
+unset DB_SECRET SERVICE_SECRET
+sudo usermod -aG rivendell "$(id -un)"
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$PKG_WEB" "$PKG"
+for exe in rdadmin rdairplay rdlibrary rdlogmanager rdimport rddbmgr; do
+  command -v "$exe" >/dev/null || fail "Installed executable missing: $exe"
+done
+log 'Installed application/database; NOT BROADCAST-QUALIFIED.'
+log 'Log out/in, configure audio and service in RDAdmin, mount NAS read-only.'
+log 'Then add [ExternalAudio] Root and References to /etc/rd.conf and index with rdexternal.py.'
+ >/dev/null ||
   fail 'Main package is missing RDAirPlay'
 [[ "$(dpkg-deb -f "$PKG" Package)" == rivendell ]] || fail 'Wrong main package name'
 [[ "$(dpkg-deb -f "$PKG_WEB" Package)" == rivendell-webapi ]] || fail 'Wrong webapi package name'
