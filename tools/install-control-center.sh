@@ -50,7 +50,7 @@ if (( SKIP_PACKAGES == 0 )); then
 fi
 sudo -v
 sudo install -d -o root -g root -m 0755 /usr/local/libexec/rivendell-complete
-for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py
+for name in setup-nas.sh rdexternal.py rdcatalog.py rdmounts.py \
             rdrequest_ops.py rdrequests.py rdlive.py; do
   sudo install -o root -g root -m 0755 "$ROOT/tools/$name" "/usr/local/libexec/rivendell-complete/$name"
 done
