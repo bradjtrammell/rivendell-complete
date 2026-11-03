@@ -5,6 +5,8 @@ import importlib.util
 import pathlib
 import subprocess
 import sys
+import tempfile
+from unittest.mock import patch
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -64,6 +66,25 @@ class ControlCenterSafety(unittest.TestCase):
         self.assertNotIn("rm -rf", installer)
         self.assertNotIn("git reset", installer)
         self.assertNotIn("systemctl enable", installer)
+
+    def test_selected_nas_subfolder_mapping_is_persistent_and_not_secret(self):
+        from PyQt5.QtWidgets import QApplication
+        import sys
+        sys.path.insert(0, str(ROOT / "tools"))
+        import rdcomplete_control as control
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(control, "CONFIG", pathlib.Path(folder) / "config"), \
+                 patch.object(control.Console, "readiness", lambda self: None):
+                gui = control.Console()
+                gui._save_source_folder("archive", "Music/Old Hits")
+                self.assertEqual(gui._load_source_folders()["archive"], "Music/Old Hits")
+                p = pathlib.Path(folder) / "config" / "nas-source-folders.json"
+                self.assertEqual(p.stat().st_mode & 0o777, 0o600)
+                self.assertNotIn("password", p.read_text().lower())
+                with self.assertRaises(ValueError):
+                    gui._save_source_folder("archive", "../etc")
+                gui.close()
 
     def test_controls_never_auto_start_broadcast(self):
         source = (ROOT / "tools" / "rdcomplete_control.py").read_text()
