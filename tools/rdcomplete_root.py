@@ -21,6 +21,9 @@ MOUNT = Path("/mnt/radio-music")
 CONF = Path("/etc/rivendell.d/rd-default.conf")
 REFS = Path("/var/lib/rivendell/external-media")
 HERE = Path(__file__).resolve().parent
+# The installed root helper and mount inventory are root-owned siblings.
+sys.path.insert(0, str(HERE))
+from rdmounts import (MountError, mount_path, fstab_mounts, validate_source as validate_remote)
 GROUP_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,9}\Z")
 NFS_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*:/[A-Za-z0-9_./-]+\Z")
 SMB_PATTERN = re.compile(r"//[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_./-]+\Z")
@@ -31,32 +34,53 @@ class CommissionError(RuntimeError):
 
 
 def validate_source(protocol: str, source: str) -> None:
-    match = NFS_PATTERN if protocol == "nfs" else SMB_PATTERN if protocol == "smb" else None
-    if match is None or not match.fullmatch(source):
-        raise CommissionError("Invalid NAS source (expected a literal NFS export or SMB share)")
+    try:
+        validate_remote(protocol, source)
+    except MountError as exc:
+        raise CommissionError(str(exc)) from exc
 
 
-def verify_mount() -> str:
-    if MOUNT.is_symlink() or not MOUNT.is_dir():
-        raise CommissionError("NAS mountpoint is not a regular directory")
+def verify_mount(name: str | None = None) -> str:
+    try:
+        target = mount_path(name) if name is not None else MOUNT
+    except MountError as exc:
+        raise CommissionError(str(exc)) from exc
+    if MOUNT.is_symlink() or target.is_symlink() or not target.is_dir():
+        raise CommissionError(f"NAS mountpoint is missing or a symlink: {target}")
+    # Inspect the exact mountpoint rather than a containing parent filesystem.
     result = subprocess.run(
-        ["/usr/bin/findmnt", "-rn", "-M", str(MOUNT), "-o", "SOURCE,FSTYPE,OPTIONS"],
+        ["/usr/bin/findmnt", "-rn", "-M", str(target), "-o", "SOURCE,FSTYPE,OPTIONS"],
         capture_output=True, text=True, timeout=10, check=False,
     )
     if result.returncode or not result.stdout.strip():
-        raise CommissionError("NAS is not mounted at /mnt/radio-music")
+        raise CommissionError(f"NAS source is not mounted: {target}")
     fields = result.stdout.strip().split(None, 2)
     if len(fields) != 3 or fields[1] not in ("nfs", "nfs4", "cifs"):
-        raise CommissionError("The source is not an NFS/SMB mount")
-    if "ro" not in fields[2].split(","):
-        raise CommissionError("NAS source is not mounted read-only")
-    if not MOUNT.exists():
-        raise CommissionError("NAS is unavailable")
+        raise CommissionError(f"Not an active NFS/SMB mount: {target}")
+    if "ro" not in fields[2].split(",") or not (os.statvfs(target).f_flag & os.ST_RDONLY):
+        raise CommissionError(f"NAS mount is writable; refusing: {target}")
     return fields[0]
 
 
+def verify_sources() -> None:
+    items = fstab_mounts()
+    if not items:
+        # Support a manually mounted legacy single-root configuration.
+        verify_mount()
+        return
+    # Do not report a partially offline collection as ready for live playout.
+    if any(not item["readonly_configured"] for item in items):
+        raise CommissionError("An NFS/SMB source in fstab lacks read-only options")
+    for item in items:
+        name = None if item["legacy"] else item["name"]
+        actual = verify_mount(name)
+        if actual != item["source"]:
+            raise CommissionError(f"NAS source changed unexpectedly: {item['name']}")
+
+
+
 def configure_external() -> None:
-    verify_mount()
+    verify_sources()
     if not CONF.is_file() or CONF.is_symlink() or os.path.realpath("/etc/rd.conf") != str(CONF):
         raise CommissionError("Unexpected Rivendell configuration layout; refusing to edit it")
     p = configparser.RawConfigParser()
@@ -116,12 +140,14 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("mount-nfs", "mount-smb"):
         sub = commands.add_parser(name)
         sub.add_argument("--source", required=True)
+        sub.add_argument("--name", help="Stable name for additional NAS share")
     commands.add_parser("configure-external")
     commands.add_parser("export-catalog")
     commands.add_parser("restart-audio")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
+        sub.add_argument("--name", help="Only import from the named read-only NAS share")
         sub.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
     if os.geteuid() != 0:
@@ -130,26 +156,35 @@ def main(argv: list[str] | None = None) -> int:
     if args.action in ("mount-nfs", "mount-smb"):
         protocol = "nfs" if args.action == "mount-nfs" else "smb"
         validate_source(protocol, args.source)
-        # The mounted source is not replaced if it is already present.
         try:
-            existing = verify_mount()
-        except CommissionError:
-            existing = None
-        if existing is not None:
-            if existing != args.source:
-                raise CommissionError(f"Another NAS source is already mounted: {existing}")
-            print("Existing read-only NAS mount preserved")
+            target = mount_path(args.name) if args.name else MOUNT
+        except MountError as exc:
+            raise CommissionError(str(exc)) from exc
+        items = fstab_mounts()
+        if args.name and any(item["legacy"] for item in items):
+            raise CommissionError("A legacy root-mounted NAS must be migrated separately; preserving its references")
+        if not args.name and any(not item["legacy"] for item in items):
+            raise CommissionError("Cannot mount over a named NAS collection")
+        matching = [item for item in items if item["path"] == str(target)]
+        if matching:
+            if len(matching) != 1 or matching[0]["source"] != args.source:
+                raise CommissionError("This NAS mount name already belongs to a different share")
+            actual = verify_mount(args.name)
+            if actual != args.source:
+                raise CommissionError("Configured mount is not online or maps to a different source")
+            print(f"Existing read-only source preserved: {target}")
         else:
             script = HERE / "setup-nas.sh"
             if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
                 raise CommissionError("Privileged NAS installer is not root-owned")
-            proc = subprocess.run(
-                ["/usr/bin/bash", str(script), "--" + protocol, args.source],
-                stdin=sys.stdin, timeout=480, check=False,
-            )
+            cmd = ["/usr/bin/bash", str(script), "--" + protocol, args.source]
+            if args.name:
+                cmd += ["--mountpoint", str(target)]
+            proc = subprocess.run(cmd, stdin=sys.stdin, timeout=480, check=False)
             if proc.returncode:
                 raise CommissionError(f"NAS mounting failed (exit {proc.returncode})")
-        verify_mount()
+            if verify_mount(args.name) != args.source:
+                raise CommissionError("Mount source mismatch following NAS setup")
         configure_external()
     elif args.action == "configure-external":
         configure_external()
@@ -159,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         ).returncode == 0:
             raise CommissionError("Stop RDAirPlay before restarting the audio daemon")
-        verify_mount()
+        verify_sources()
         subprocess.run(["/usr/bin/systemctl", "restart", "rivendell"],
                        check=True, timeout=40)
         subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", "rivendell"],
@@ -180,7 +215,9 @@ def main(argv: list[str] | None = None) -> int:
             raise CommissionError("Invalid Rivendell group")
         if args.limit is not None and not 1 <= args.limit <= 100000:
             raise CommissionError("Import limit must be between 1 and 100000")
-        verify_mount()
+        if args.name is None and any(not item["legacy"] for item in fstab_mounts()):
+            raise CommissionError("Choose a named NAS source to import")
+        verify_mount(args.name)
         if args.action == "import" and subprocess.run(
             ["/usr/bin/pgrep", "-x", "rdairplay"], check=False,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -189,7 +226,10 @@ def main(argv: list[str] | None = None) -> int:
         script = HERE / "rdexternal.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
             raise CommissionError("Privileged media indexer is not root-owned")
-        cmd = ["/usr/bin/python3", str(script), "--root", str(MOUNT), "--group", args.group]
+        root = mount_path(args.name) if args.name else MOUNT
+        cmd = ["/usr/bin/python3", str(script), "--root", str(root), "--group", args.group]
+        if args.name:
+            cmd.extend(["--reference-prefix", args.name])
         if args.limit is not None:
             cmd.extend(["--limit", str(args.limit)])
         if args.action == "import":
@@ -203,6 +243,6 @@ def main(argv: list[str] | None = None) -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (CommissionError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
+    except (CommissionError, MountError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         raise SystemExit(1)
