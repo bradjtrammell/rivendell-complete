@@ -1,0 +1,11 @@
+[Unit]
+Description=Rivendell Complete NAS recovery after reboot or network outage
+
+[Timer]
+OnBootSec=35s
+OnUnitInactiveSec=120s
+AccuracySec=15s
+Unit=rdcomplete-nas-restore.service
+
+[Install]
+WantedBy=timers.target

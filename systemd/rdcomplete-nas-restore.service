@@ -1,0 +1,16 @@
+[Unit]
+Description=Rivendell Complete recover persistent read-only NAS sources
+Wants=network-online.target
+After=network-online.target remote-fs.target
+ConditionPathExists=/etc/fstab
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/rivendell-complete/rdcomplete_nas_restore.py
+TimeoutStartSec=180
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/run /mnt/radio-music
+
