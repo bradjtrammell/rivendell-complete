@@ -78,35 +78,60 @@ class Check:
                  str(nas or "missing"))
         if nas is not None:
             try:
-                root=nas.resolve(strict=True)
-                f=os.statvfs(root)
-                readonly=bool(f.f_flag & os.ST_RDONLY)
-                self.add("nas-readonly",readonly,str(root))
-                mount=self.command("findmnt",["-rn","-M",str(root),"-o","SOURCE,FSTYPE,OPTIONS"])
-                detail=mount.stdout.strip() if mount and mount.returncode==0 else "mount missing"
-                fields=detail.split(None,2)
-                verified=(root!=Path("/") and len(fields)==3
-                          and fields[1] in ("nfs","nfs4","cifs")
-                          and "ro" in fields[2].split(","))
-                self.add("nas-mounted",bool(mount and mount.returncode==0 and verified),detail)
-                first=None
-                checked=0
-                deadline=time.monotonic()+5.0
-                # Bound network filesystem traversal on very large/offline shares.
-                for directory, subdirs, filenames in os.walk(root, followlinks=False):
-                    subdirs[:]=[n for n in subdirs if not (Path(directory)/n).is_symlink()]
-                    for filename in filenames:
-                        checked+=1
-                        if filename.lower().endswith((".mp3",".wav",".ogg",".flac")):
-                            first=str((Path(directory)/filename).relative_to(root))
-                            break
-                        if checked>=10000 or time.monotonic()>=deadline:
-                            break
-                    if first or checked>=10000 or time.monotonic()>=deadline:
+                root = nas.resolve(strict=True)
+                if root == Path("/") or not root.is_dir() or root.is_symlink():
+                    raise OSError("Invalid source root")
+                # Multiple NAS volumes may live underneath one local directory.
+                # The directory itself is not a NAS mount and need not be ro.
+                source_dirs = [root]
+                inventory = self.command("rdcomplete-mounts", ["--json"], timeout=35)
+                registered = []
+                if inventory is not None and inventory.returncode == 0:
+                    try:
+                        registered = json.loads(inventory.stdout)
+                    except (ValueError, TypeError):
+                        registered = []
+                named = [r for r in registered if not r.get("legacy")]
+                if named:
+                    source_dirs = [Path(r["path"]) for r in named if r.get("readonly")]
+                    ready = all(r.get("readonly") and r.get("mounted") for r in named)
+                    detail = ", ".join(
+                        f'{r["name"]}:{"read-only" if r.get("readonly") else "offline/unsafe"}'
+                        for r in named)
+                    self.add("nas-readonly", ready, detail)
+                    self.add("nas-mounted", ready, detail)
+                else:
+                    readonly = bool(os.statvfs(root).f_flag & os.ST_RDONLY)
+                    self.add("nas-readonly", readonly, str(root))
+                    mount = self.command("findmnt", ["-rn", "-M", str(root), "-o",
+                                                     "SOURCE,FSTYPE,OPTIONS"])
+                    detail = mount.stdout.strip() if mount and mount.returncode == 0 else "mount missing"
+                    fields = detail.split(None, 2)
+                    verified = (len(fields) == 3
+                                and fields[1] in ("nfs", "nfs4", "cifs")
+                                and "ro" in fields[2].split(","))
+                    self.add("nas-mounted", verified, detail)
+                first = None
+                checked = 0
+                deadline = time.monotonic() + 5.0
+                for source in source_dirs:
+                    if first or time.monotonic() >= deadline:
                         break
-                self.add("nas-audio-readable",bool(first),first or "no audio found")
-            except (OSError,StopIteration) as exc:
-                self.add("nas-readonly",False,str(exc))
+                    for directory, subdirs, filenames in os.walk(source, followlinks=False):
+                        subdirs[:] = [n for n in subdirs
+                                     if not (Path(directory) / n).is_symlink()]
+                        for filename in filenames:
+                            checked += 1
+                            if filename.lower().endswith((".mp3", ".wav", ".ogg", ".flac")):
+                                first = str((Path(directory) / filename).relative_to(root))
+                                break
+                            if checked >= 10000 or time.monotonic() >= deadline:
+                                break
+                        if first or checked >= 10000 or time.monotonic() >= deadline:
+                            break
+                self.add("nas-audio-readable", bool(first), first or "no accessible audio found")
+            except (OSError, StopIteration) as exc:
+                self.add("nas-readonly", False, str(exc))
         for name in ("rdairplay","jackd"):
             result=self.command("pgrep",["-x",name])
             self.add("running-"+name,result is not None and result.returncode==0,
