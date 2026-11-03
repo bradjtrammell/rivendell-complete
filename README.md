@@ -144,12 +144,12 @@ additional engineering; **this command is not a complete 5.0 release**.
 
 ### RDAirPlay listener request controls (native build required)
 
-The native RDAirPlay source in \`rdairplay/rdairplay.cpp\` adds a **Requests**
+The native RDAirPlay source in `rdairplay/rdairplay.cpp` adds a **Requests**
 button in the bottom operator control strip. Its dialog displays each
 listener's name, requested song and artist, cart and approval status; the
 operator can approve, reject or insert an approved request into the currently
 loaded **Main Log**. Insertion uses Rivendell's native
-\`RDLogPlay::insert()\`, not a database-only status change. Each request is
+`RDLogPlay::insert()`, not a database-only status change. Each request is
 atomically reserved, deduplicated and reconciled. Automatic fulfillment is
 **opt-in**, only runs while RDAirPlay is in **AUTO** mode with an operator
 authorized to add to the log, and requires today's committed, protected
@@ -176,8 +176,8 @@ passed native build and runtime dependency checks.
 ### NAS discovery, categories and scheduling
 
 In **Music & NAS**, entering a hostname/IP and SMB credentials enables
-**Discover server shares** using Samba's \`smbclient\`, with optional
-subfolder browsing. NFS discovers advertised exports using \`showmount\`.
+**Discover server shares** using Samba's `smbclient`, with optional
+subfolder browsing. NFS discovers advertised exports using `showmount`.
 SMB discovery credentials go through stdin into a protected short-lived
 credential file; they never appear in process arguments. Selecting a share
 populates the read-only mount mapping, and the selected subfolder is saved
@@ -201,7 +201,7 @@ remain in RDLogManager, which is linked from the scheduling page.
 can be inserted at the selected interval, but arbitrary jingle rotations
 and detailed traffic clocks are not yet a complete in-GUI experience.
 Unfillable 24-hour plans correctly fail rather than fabricating audio.
-The request status \`scheduled\` means inserted in the log, **not proof
+The request status `scheduled` means inserted in the log, **not proof
 that the audio actually played**.
 
 ### Native Qt station control center
