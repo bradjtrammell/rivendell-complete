@@ -86,6 +86,69 @@ class ControlCenterSafety(unittest.TestCase):
                     gui._save_source_folder("archive", "../etc")
                 gui.close()
 
+    def test_smb_browser_normalizes_underscores_and_trailing_slash(self):
+        from PyQt5.QtWidgets import QApplication
+        sys.path.insert(0, str(ROOT / "tools"))
+        import rdcomplete_control as control
+        self.assertEqual(
+            control.normalize_smb_unc("//192.168.0.146/RADIO_BROADCASTING/"),
+            ("//192.168.0.146/RADIO_BROADCASTING", "RADIO_BROADCASTING"))
+        self.assertEqual(
+            control.normalize_nas_folder("Music/Gold_Hits/"),
+            "Music/Gold_Hits")
+        self.assertEqual(
+            control.nas_child_folder("Music", "Rock_Classic"),
+            "Music/Rock_Classic")
+        for invalid in ("//192.168.0.146/RADIO_BROADCASTING/Evil",
+                        "//192.168.0.146/../Evil"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                control.normalize_smb_unc(invalid)
+        with self.assertRaises(ValueError):
+            control.normalize_smb_unc("//192.168.0.146/U1000/", "other-nas")
+        for invalid in ("../escape", "Music/../escape", "/absolute", "Music//bad"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                control.normalize_nas_folder(invalid)
+
+    def test_recursive_nas_discovery_stays_inside_selected_share(self):
+        from PyQt5.QtWidgets import QApplication
+        import json
+        sys.path.insert(0, str(ROOT / "tools"))
+        import rdcomplete_control as control
+        app = QApplication.instance() or QApplication([])
+        with patch.object(control.Console, "readiness", lambda self: None):
+            gui = control.Console()
+            with patch.object(gui, "execute") as execute:
+                gui.nas_server.setText("192.168.0.146")
+                gui.nas_protocol.setCurrentText("SMB")
+                gui.nas_username.setText("u1000")
+                gui.nas_password.setText("test-secret")
+                gui.nas_source.setText("//192.168.0.146/U1000/")
+                self.assertTrue(gui._discovery_command("folders"))
+                argv = execute.call_args.args[0]
+                self.assertEqual(argv[argv.index("--share") + 1], "U1000")
+                self.assertEqual(argv[argv.index("--folder") + 1], "")
+                self.assertNotIn("test-secret", str(argv))
+                gui._show_nas_discovery(json.dumps({
+                    "folder": "", "folders": ["RADIO_BROADCASTING", "Music"],
+                }).encode())
+                gui.nas_discovery.setCurrentCell(0, 0)
+                gui.nas_open_selected()
+                argv = execute.call_args.args[0]
+                self.assertEqual(argv[argv.index("--folder") + 1],
+                                 "RADIO_BROADCASTING")
+                self.assertEqual(gui.nas_browse_folder.text(), "RADIO_BROADCASTING")
+                gui._show_nas_discovery(json.dumps({
+                    "folder": "RADIO_BROADCASTING", "folders": ["Gold_Hits"],
+                }).encode())
+                gui.nas_discovery.setCurrentCell(0, 0)
+                gui.nas_open_selected()
+                argv = execute.call_args.args[0]
+                self.assertEqual(argv[argv.index("--folder") + 1],
+                                 "RADIO_BROADCASTING/Gold_Hits")
+                gui.nas_go_up()
+                self.assertEqual(gui.nas_browse_folder.text(), "RADIO_BROADCASTING")
+            gui.close()
+
     def test_native_airplay_staging_preserves_installed_packages(self):
         source = (ROOT / "tools" / "install-airplay-requests.sh").read_text()
         self.assertIn("strings \"$bin\"", source)
