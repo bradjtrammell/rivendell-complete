@@ -62,7 +62,7 @@ def create_recovery_copy(records: list[dict], folder: Path = BACKUPS) -> Path:
         raise AuditError("Recovery directory has unsafe owner/permissions")
     name = datetime.now(timezone.utc).strftime("import-carts-%Y%m%dT%H%M%SZ-") + str(os.getpid()) + ".json"
     target = folder / name
-    with target.open("xb") as handle:
+    with target.open("x", encoding="utf-8") as handle:
         os.fchmod(handle.fileno(), 0o600)
         json.dump(records, handle, indent=2, ensure_ascii=False, default=str)
         handle.write("\n")

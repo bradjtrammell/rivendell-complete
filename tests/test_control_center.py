@@ -65,7 +65,8 @@ class ControlCenterSafety(unittest.TestCase):
         self.assertIn("xdg/rivendell-complete.desktop", installer)
         self.assertNotIn("rm -rf", installer)
         self.assertNotIn("git reset", installer)
-        self.assertNotIn("systemctl enable", installer)
+        self.assertIn("systemctl enable --now rdcomplete-nas-restore.timer", installer)
+        self.assertNotIn("systemctl enable --now rdcomplete-stream", installer)
 
     def test_selected_nas_subfolder_mapping_is_persistent_and_not_secret(self):
         from PyQt5.QtWidgets import QApplication
