@@ -68,7 +68,7 @@ def refresh(fstab: Path = Path("/etc/fstab"), root: Path = ROOT) -> tuple[int, i
                     if unit.endswith(".automount"):
                         run(["/usr/bin/systemctl", "start", unit], timeout=15)
             run(["/usr/bin/timeout", "-k", "2", "16",
-                 "/usr/bin/stat", "--", str(target / ".")], timeout=20)
+                 "/usr/bin/stat", "--", str(target) + "/."], timeout=20)
             live = mount_inventory(fstab, root, probe=False)
             row = next((i for i in live if i["path"] == entry["path"]), None)
             if row is None:
