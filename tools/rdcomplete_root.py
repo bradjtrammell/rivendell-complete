@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import configparser
+import json
 import os
 from pathlib import Path
 import re
@@ -162,11 +163,13 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_argument("--name", help="Stable name for additional NAS share")
     commands.add_parser("configure-external")
     commands.add_parser("export-catalog")
+    commands.add_parser("list-groups")
     commands.add_parser("restart-audio")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
         sub.add_argument("--name", help="Only import from the named read-only NAS share")
+        sub.add_argument("--folder", default="", help="Optional existing folder inside the share")
         sub.add_argument("--limit", type=int, default=None)
     args = parser.parse_args(argv)
     if os.geteuid() != 0:
@@ -219,6 +222,20 @@ def main(argv: list[str] | None = None) -> int:
         subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", "rivendell"],
                        check=True, timeout=15)
         print("Rivendell audio daemon restarted with the NAS configuration")
+    elif args.action == "list-groups":
+        script = HERE / "rdexternal.py"
+        if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
+            raise CommissionError("Rivendell group reader is not root-owned")
+        import pymysql
+        from rdexternal import read_db_settings
+        db = pymysql.connect(**read_db_settings(Path("/etc/rd.conf")))
+        try:
+            with db.cursor() as cur:
+                cur.execute("SELECT NAME FROM GROUPS ORDER BY NAME")
+                groups = [str(row[0]).strip() for row in cur.fetchall()]
+        finally:
+            db.close()
+        print(json.dumps({"groups": [g for g in groups if GROUP_PATTERN.fullmatch(g)]}))
     elif args.action == "export-catalog":
         script = HERE / "rdcatalog.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
@@ -246,9 +263,23 @@ def main(argv: list[str] | None = None) -> int:
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
             raise CommissionError("Privileged media indexer is not root-owned")
         root = mount_path(args.name) if args.name else MOUNT
+        mount_root = root.resolve(strict=True)
+        folder = args.folder
+        if folder:
+            if len(folder) > 1024 or folder.startswith("/") or chr(92) in folder:
+                raise CommissionError("Unsafe import folder")
+            for segment in folder.split("/"):
+                if segment in ("", ".", "..") or any(ord(c) < 32 or ord(c) == 127 for c in segment):
+                    raise CommissionError("Unsafe import folder component")
+                root = root / segment
+                if root.is_symlink():
+                    raise CommissionError("Folder symlinks are not accepted")
+            if not root.resolve(strict=True).is_relative_to(mount_root) or not root.is_dir():
+                raise CommissionError("Selected import folder escapes source mount")
         cmd = ["/usr/bin/python3", str(script), "--root", str(root), "--group", args.group]
-        if args.name:
-            cmd.extend(["--reference-prefix", args.name])
+        prefix = "/".join(filter(None, [args.name or "", folder]))
+        if prefix:
+            cmd.extend(["--reference-prefix", prefix])
         if args.limit is not None:
             cmd.extend(["--limit", str(args.limit)])
         if args.action == "import":

@@ -269,7 +269,12 @@ def main(argv=None) -> int:
         ap.error("Invalid cart number range")
     if args.limit is not None and args.limit < 1:
         ap.error("--limit must be positive")
-    if args.reference_prefix and not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", args.reference_prefix):
+    if args.reference_prefix and (
+        len(args.reference_prefix) > 1024
+        or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}(?:/[A-Za-z0-9_ .-]+)*",
+                            args.reference_prefix)
+        or any(part in ("", ".", "..") for part in args.reference_prefix.split("/"))
+    ):
         ap.error("Invalid NAS source reference prefix")
     root = args.root.resolve(strict=True)
     if not root.is_dir() or root == Path("/"):
