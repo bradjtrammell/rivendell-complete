@@ -37,10 +37,19 @@ def hostname(server: str) -> str:
 
 
 def share_name(name: str) -> str:
-    # The on-air fstab writer requires names without spaces/escapes.
-    if not isinstance(name, str) or SHARE.fullmatch(name) is None:
-        raise BrowseError("Share name cannot be mounted safely; select an alphanumeric share")
-    return name
+    """Validate one SMB share, allowing a harmless trailing path separator.
+
+    Underscores are legal SMB share-name characters. Do not accept nested
+    paths here: those belong in the separate relative folder parameter.
+    """
+    if not isinstance(name, str):
+        raise BrowseError("Select a valid SMB share name")
+    canonical = name.rstrip("/")
+    if SHARE.fullmatch(canonical) is None:
+        raise BrowseError(
+            "Invalid SMB share name: use letters, numbers, underscores, "
+            "hyphens or periods; select subfolders separately")
+    return canonical
 
 
 def folder_path(relative: str) -> str:
