@@ -24,8 +24,22 @@
 #include <sys/wait.h>
 
 #include <QApplication>
+#include <QDialog>
+#include <QCheckBox>
+#include <QFileInfo>
+#include <QHeaderView>
+#include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QMessageBox>
+#include <QProcess>
+#include <QPushButton>
+#include <QTableWidget>
+#include <QTimer>
 #include <QTranslator>
+#include <QVBoxLayout>
 
 #include <rdconf.h>
 #include <rdgetpasswd.h>
@@ -58,6 +72,10 @@ MainWidget::MainWidget(RDConfig *config,QWidget *parent)
 
   air_panel=NULL;
   air_tracker=NULL;
+  air_requests_dialog=NULL;
+  air_requests_table=NULL;
+  air_requests_auto=NULL;
+  air_requests_status=NULL;
 
   //
   // Splash Screen
@@ -625,6 +643,19 @@ MainWidget::MainWidget(RDConfig *config,QWidget *parent)
   air_tracker_button->setText(tr("Voice\nTracker"));
   air_tracker_button->setFocusPolicy(Qt::NoFocus);
   connect(air_tracker_button,SIGNAL(clicked()),this,SLOT(trackerButtonData()));
+
+  // Rivendell Complete requests remain operator-driven by default. This
+  // control uses the same log insertion path as RDAirPlay's ADD button.
+  air_requests_button=new QPushButton(this);
+  air_requests_button->setFont(bigButtonFont());
+  air_requests_button->setText(tr("Requests"));
+  air_requests_button->setToolTip(tr("View, approve and queue listener requests"));
+  air_requests_button->setFocusPolicy(Qt::NoFocus);
+  connect(air_requests_button,SIGNAL(clicked()),this,SLOT(requestsButtonData()));
+  air_requests_timer=new QTimer(this);
+  air_requests_timer->setInterval(15000);
+  connect(air_requests_timer,SIGNAL(timeout()),this,SLOT(requestsTimerData()));
+  air_requests_timer->start();
 
   //
   // Button Log
@@ -1257,8 +1288,338 @@ void MainWidget::userData()
 				 arrange_allowed,playout_allowed);
   }
   air_tracker_button->setEnabled(tracking_allowed);
+  // The panel stays accessible for status/approvals; queue mutations
+  // additionally require the native ADD permissions below.
+  air_requests_button->setEnabled(true);
   if((!tracking_allowed)&&air_tracker->isVisible()) {
     fullLogButtonData(0);
+  }
+}
+
+
+
+//
+// Rivendell Complete request controls. These operations are intentionally
+// bounded and local; the playout engine remains RDLogPlay.
+//
+bool MainWidget::RunRequestCommand(const QStringList &arguments,
+                                   QJsonObject *response,QString *error)
+{
+  const QString helper="/usr/local/libexec/rivendell-complete/rdrequest_ops.py";
+  if(!QFileInfo::exists(helper)) {
+    *error=tr("Request console is not installed. Update Rivendell Complete.");
+    return false;
+  }
+  QProcess process;
+  QStringList args;
+  args << helper;
+  args << arguments;
+  process.start("/usr/bin/python3",args);
+  if(!process.waitForStarted(700)) {
+    *error=tr("Could not start the local request bridge.");
+    return false;
+  }
+  if(!process.waitForFinished(2500)) {
+    process.kill();
+    process.waitForFinished(500);
+    *error=tr("Local request database timed out; no playback change was made.");
+    return false;
+  }
+  if(process.exitStatus()!=QProcess::NormalExit||process.exitCode()!=0) {
+    *error=QString::fromUtf8(process.readAllStandardError()).trimmed();
+    if(error->isEmpty()) {
+      *error=tr("The request operation was rejected.");
+    }
+    return false;
+  }
+  QJsonParseError parse_error;
+  QJsonDocument json=QJsonDocument::fromJson(process.readAllStandardOutput(),
+                                             &parse_error);
+  if(parse_error.error!=QJsonParseError::NoError||!json.isObject()) {
+    *error=tr("Unexpected response from the local request bridge.");
+    return false;
+  }
+  *response=json.object();
+  return true;
+}
+
+
+void MainWidget::requestsButtonData()
+{
+  if(air_requests_dialog==NULL) {
+    air_requests_dialog=new QDialog(this,Qt::Tool);
+    air_requests_dialog->setWindowTitle(tr("Rivendell Complete - Listener Requests"));
+    air_requests_dialog->resize(875,510);
+    QVBoxLayout *layout=new QVBoxLayout(air_requests_dialog);
+    air_requests_status=new QLabel(tr("Loading requests..."),air_requests_dialog);
+    air_requests_status->setWordWrap(true);
+    layout->addWidget(air_requests_status);
+
+    air_requests_table=new QTableWidget(0,5,air_requests_dialog);
+    QStringList names;
+    names << tr("ID") << tr("Song / Artist") << tr("Requested by")
+          << tr("Status") << tr("Cart");
+    air_requests_table->setHorizontalHeaderLabels(names);
+    air_requests_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    air_requests_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    air_requests_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    air_requests_table->horizontalHeader()->setStretchLastSection(true);
+    air_requests_table->setColumnWidth(0,65);
+    air_requests_table->setColumnWidth(1,325);
+    air_requests_table->setColumnWidth(2,190);
+    air_requests_table->setColumnWidth(3,110);
+    layout->addWidget(air_requests_table);
+
+    QHBoxLayout *actions=new QHBoxLayout();
+    QPushButton *refresh=new QPushButton(tr("Refresh"),air_requests_dialog);
+    QPushButton *approve=new QPushButton(tr("Approve"),air_requests_dialog);
+    QPushButton *reject=new QPushButton(tr("Reject"),air_requests_dialog);
+    QPushButton *queue=new QPushButton(tr("Add to Main Log"),air_requests_dialog);
+    actions->addWidget(refresh);
+    actions->addWidget(approve);
+    actions->addWidget(reject);
+    actions->addWidget(queue);
+    layout->addLayout(actions);
+    connect(refresh,SIGNAL(clicked()),this,SLOT(requestsRefreshData()));
+    connect(approve,SIGNAL(clicked()),this,SLOT(requestsApproveData()));
+    connect(reject,SIGNAL(clicked()),this,SLOT(requestsRejectData()));
+    connect(queue,SIGNAL(clicked()),this,SLOT(requestsQueueData()));
+
+    air_requests_auto=new QCheckBox(
+      tr("Automatically queue approved requests when the protected schedule allows"),
+      air_requests_dialog);
+    air_requests_auto->setChecked(false);
+    air_requests_auto->setToolTip(
+      tr("Requires RDAirPlay AUTO mode and today's protected 24-hour plan. "
+         "This setting resets OFF whenever the station is restarted."));
+    layout->addWidget(air_requests_auto);
+    QLabel *details=new QLabel(
+      tr("Requests are queued into the main log; they are not marked PLAYED. "
+         "Legal IDs and paid spots are protected by the live schedule ledger."),
+      air_requests_dialog);
+    details->setWordWrap(true);
+    layout->addWidget(details);
+  }
+  air_requests_dialog->show();
+  air_requests_dialog->raise();
+  air_requests_dialog->activateWindow();
+  RefreshRequestTable();
+}
+
+
+void MainWidget::RefreshRequestTable()
+{
+  if(air_requests_table==NULL) {
+    return;
+  }
+  QJsonObject data;
+  QString error;
+  if(!RunRequestCommand(QStringList()<<"list",&data,&error)) {
+    air_requests_status->setText(error);
+    return;
+  }
+  QJsonArray rows=data.value("requests").toArray();
+  air_requests_table->setRowCount(rows.size());
+  for(int row=0;row<rows.size();row++) {
+    QJsonObject item=rows.at(row).toObject();
+    QStringList values;
+    values << QString::number(item.value("id").toVariant().toLongLong())
+           << item.value("title").toString()+" - "+item.value("artist").toString()
+           << item.value("requester").toString()
+           << item.value("status").toString()
+           << QString::number(item.value("cart").toInt());
+    for(int col=0;col<values.size();col++) {
+      QTableWidgetItem *cell=new QTableWidgetItem(values.at(col));
+      air_requests_table->setItem(row,col,cell);
+    }
+  }
+  air_requests_status->setText(
+    tr("%1 awaiting approval / %2 approved, awaiting scheduling")
+      .arg(data.value("pending").toInt()).arg(data.value("approved").toInt()));
+  air_requests_button->setText(
+    tr("Requests\n[%1]").arg(data.value("pending").toInt()+
+                            data.value("approved").toInt()));
+}
+
+
+void MainWidget::requestsRefreshData()
+{
+  RefreshRequestTable();
+}
+
+
+void MainWidget::requestsApproveData()
+{
+  if(air_requests_table==NULL||air_requests_table->currentRow()<0) {
+    return;
+  }
+  int row=air_requests_table->currentRow();
+  if(air_requests_table->item(row,3)->text()!="pending") {
+    QMessageBox::information(this,tr("Requests"),tr("Select a pending request."));
+    return;
+  }
+  QString id=air_requests_table->item(row,0)->text();
+  QJsonObject result;
+  QString error;
+  if(!RunRequestCommand(QStringList()<<"approve"<<"--id"<<id,&result,&error)) {
+    QMessageBox::warning(this,tr("Requests"),error);
+  }
+  RefreshRequestTable();
+}
+
+
+void MainWidget::requestsRejectData()
+{
+  if(air_requests_table==NULL||air_requests_table->currentRow()<0) {
+    return;
+  }
+  int row=air_requests_table->currentRow();
+  if(air_requests_table->item(row,3)->text()!="pending") {
+    QMessageBox::information(this,tr("Requests"),tr("Select a pending request."));
+    return;
+  }
+  if(QMessageBox::question(this,tr("Reject request"),
+                            tr("Reject this listener request?"),
+                            QMessageBox::Yes|QMessageBox::No,
+                            QMessageBox::No)!=QMessageBox::Yes) {
+    return;
+  }
+  QString id=air_requests_table->item(row,0)->text();
+  QJsonObject result;
+  QString error;
+  if(!RunRequestCommand(QStringList()<<"reject"<<"--id"<<id,&result,&error)) {
+    QMessageBox::warning(this,tr("Requests"),error);
+  }
+  RefreshRequestTable();
+}
+
+
+void MainWidget::QueueListenerRequest(qlonglong request_id,int cart,
+                                      bool automatic)
+{
+  if(!air_add_button->isEnabled()) {
+    if(!automatic) {
+      QMessageBox::warning(this,tr("Requests"),
+        tr("Current user cannot modify the on-air log."));
+    }
+    return;
+  }
+  if(automatic&&air_op_mode[0]!=RDAirPlayConf::Auto) {
+    return;
+  }
+  if(air_log[0]->logName().isEmpty()) {
+    if(!automatic) {
+      QMessageBox::warning(this,tr("Requests"),
+        tr("Load a main log before queueing listener requests."));
+    }
+    return;
+  }
+  if(air_log[0]->nextLine()<0) {
+    if(!automatic) {
+      QMessageBox::warning(this,tr("Requests"),
+        tr("Main log has no next playable event; load a valid running log."));
+    }
+    return;
+  }
+  if(!automatic&&QMessageBox::question(
+      this,tr("Queue request"),
+      tr("Add cart %1 to the main log before its next event? "
+         "The protected schedule must have time for this track.")
+        .arg(cart),QMessageBox::Yes|QMessageBox::No,
+      QMessageBox::No)!=QMessageBox::Yes) {
+    return;
+  }
+  QJsonObject reserve;
+  QString error;
+  QString id=QString::number(request_id);
+  QString cart_arg=QString::number(cart);
+  if(!RunRequestCommand(QStringList()<<"reserve"<<"--id"<<id,&reserve,&error)) {
+    if(!automatic) {
+      QMessageBox::warning(this,tr("Requests"),error);
+    }
+    else if(air_requests_status!=NULL) {
+      air_requests_status->setText(error);
+    }
+    return;
+  }
+  if(reserve.value("cart").toInt()!=cart) {
+    RunRequestCommand(QStringList()<<"uncertain"<<"--id"<<id
+                      <<"--cart"<<cart_arg,&reserve,&error);
+    return;
+  }
+  const int position=air_log[0]->nextLine();
+  const int before=air_log[0]->lineCount();
+  // Native queued event path. Do not send a PX UDP command or directly
+  // mutate the SQLite status and assume it was actually queued.
+  air_log[0]->insert(position,cart,air_log[0]->nextTransType(position),
+                     rda->airplayConf()->defaultTransType());
+  RDLogLine *inserted=air_log[0]->logLine(position);
+  bool success=(air_log[0]->lineCount()==before+1&&inserted!=NULL&&
+                inserted->cartNumber()==(unsigned)cart);
+  if(success) {
+    air_log[0]->update(position);
+  }
+  QJsonObject finish;
+  if(!RunRequestCommand(
+       QStringList()<<(success?"complete":"uncertain")<<"--id"<<id
+                    <<"--cart"<<cart_arg,&finish,&error) || !success) {
+    QMessageBox::critical(
+      this,tr("Requests require reconciliation"),
+      tr("Request %1 has an uncertain queue outcome. Do not retry automatically. "
+         "Check the on-air log and request database before resuming. %2")
+        .arg(id).arg(error));
+    if(air_requests_auto!=NULL) {
+      air_requests_auto->setChecked(false);
+    }
+  }
+  RefreshRequestTable();
+}
+
+
+void MainWidget::requestsQueueData()
+{
+  if(air_requests_table==NULL||air_requests_table->currentRow()<0) {
+    return;
+  }
+  int row=air_requests_table->currentRow();
+  if(air_requests_table->item(row,3)->text()!="approved") {
+    QMessageBox::information(this,tr("Requests"),
+                             tr("Approve a request before queueing it."));
+    return;
+  }
+  bool ok=false;
+  qlonglong id=air_requests_table->item(row,0)->text().toLongLong(&ok);
+  if(!ok) {
+    return;
+  }
+  int cart=air_requests_table->item(row,4)->text().toInt(&ok);
+  if(ok&&cart>0&&cart<=999999) {
+    QueueListenerRequest(id,cart,false);
+  }
+}
+
+
+void MainWidget::requestsTimerData()
+{
+  if(air_requests_dialog==NULL||!air_requests_dialog->isVisible()) {
+    return;
+  }
+  RefreshRequestTable();
+  if(air_requests_auto==NULL||!air_requests_auto->isChecked()||
+     air_op_mode[0]!=RDAirPlayConf::Auto||!air_add_button->isEnabled()) {
+    return;
+  }
+  QJsonObject response;
+  QString error;
+  if(!RunRequestCommand(QStringList()<<"eligible",&response,&error)) {
+    air_requests_status->setText(
+      tr("Auto-fulfillment unavailable: %1").arg(error));
+    return;
+  }
+  QJsonObject candidate=response.value("candidate").toObject();
+  if(!candidate.isEmpty()) {
+    QueueListenerRequest(candidate.value("id").toVariant().toLongLong(),
+                         candidate.value("cart").toInt(),true);
   }
 }
 
@@ -1846,6 +2207,9 @@ void MainWidget::resizeEvent(QResizeEvent *e)
   air_tracker_button->setGeometry(xpos,h-65,80,60);
   xpos+=85;
   air_tracker_button->show();
+
+  air_requests_button->setGeometry(xpos,h-65,93,60);
+  xpos+=98;
 
   int log_button_w=(w-xpos-5)/3;
   for(int i=0;i<RDAIRPLAY_LOG_QUANTITY;i++) {

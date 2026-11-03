@@ -21,6 +21,12 @@
 #ifndef RDAIRPLAY_H
 #define RDAIRPLAY_H
 
+#include <QDialog>
+#include <QCheckBox>
+#include <QTableWidget>
+#include <QTimer>
+#include <QJsonObject>
+
 #include <rdemptycart.h>
 #include <rdmainwindow.h>
 #include <rdmeterstrip.h>
@@ -68,6 +74,12 @@ class MainWidget : public RDMainWindow
   void logReloadedData(int log);
   void userData();
   void addButtonData();
+  void requestsButtonData();
+  void requestsRefreshData();
+  void requestsApproveData();
+  void requestsRejectData();
+  void requestsQueueData();
+  void requestsTimerData();
   void deleteButtonData();
   void moveButtonData();
   void copyButtonData();
@@ -101,12 +113,22 @@ class MainWidget : public RDMainWindow
   bool AssertChannelLock(int dir,int achan);
   int AudioChannel(int card,int port) const;
   void LoadMeters();
+  bool RunRequestCommand(const QStringList &arguments,QJsonObject *response,
+                         QString *error);
+  void QueueListenerRequest(qlonglong request_id,int cart,bool automatic);
+  void RefreshRequestTable();
   RDAirPlayConf::Channel PanelChannel(int mport) const;
   RDLogPlay *air_log[RDAIRPLAY_LOG_QUANTITY];
   SoundPanel *air_panel;
   VoiceTracker *air_tracker;
   QPushButton *air_tracker_button;
   RDMeterStrip *air_meter_strip;
+  QPushButton *air_requests_button;
+  QDialog *air_requests_dialog;
+  QTableWidget *air_requests_table;
+  QLabel *air_requests_status;
+  QCheckBox *air_requests_auto;
+  QTimer *air_requests_timer;
   RDPushButton *air_add_button;
   RDPushButton *air_delete_button;
   RDPushButton *air_move_button;
