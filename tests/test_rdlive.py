@@ -29,6 +29,19 @@ class LiveTests(unittest.TestCase):
         now=datetime(2026,11,2,12,0,5)
         self.assertTrue(m.eligible_window(now,180000,[12*3600000,13*3600000]))
         self.assertFalse(m.eligible_window(now,900001,[13*3600000]))
+    def test_ledger_binds_to_original_production_log(self):
+        from datetime import datetime
+        with tempfile.TemporaryDirectory() as temp:
+            now=datetime(2026,11,2,12,10)
+            plan=Path(temp)/"2026-11-02.plan.json"
+            rows=[{"start_ms":h*3600000,"hard":True,"kind":"top-hour-id"}
+                  for h in range(24)]
+            plan.write_text(json.dumps({"log_name":"PROD_NEXT","events":rows}))
+            self.assertEqual(len(m.load_ledger(plan,now)),24)
+            plan.write_text(json.dumps({"log_name":"invalid log","events":rows}))
+            with self.assertRaises(m.LiveError):
+                m.load_ledger(plan,now)
+
     def test_validates_current_date_and_24_ids(self):
         with tempfile.TemporaryDirectory() as temp:
             day=datetime(2026,11,2,12,0,0)

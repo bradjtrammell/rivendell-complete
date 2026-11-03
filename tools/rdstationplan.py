@@ -271,7 +271,10 @@ def main(argv=None) -> int:
     if args.report_json:
         # A plan is eligible for live insertion ONLY after its corresponding
         # Rivendell log has actually been committed successfully.
-        data=(json.dumps(report,indent=2)+"\n").encode("utf-8")
+        # Record which specific Rivendell log supplied this protected
+        # chronology. Auto on-air insertion refuses mismatched loaded logs.
+        data=(json.dumps({"log_name": args.log_name, "events": report},
+                         indent=2)+"\n").encode("utf-8")
         import os
         fd=os.open(args.report_json,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
         with os.fdopen(fd,"wb") as out:

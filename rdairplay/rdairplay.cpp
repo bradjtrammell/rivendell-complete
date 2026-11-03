@@ -1533,7 +1533,8 @@ void MainWidget::QueueListenerRequest(qlonglong request_id,int cart,
   QString error;
   QString id=QString::number(request_id);
   QString cart_arg=QString::number(cart);
-  if(!RunRequestCommand(QStringList()<<"reserve"<<"--id"<<id,&reserve,&error)) {
+  if(!RunRequestCommand(QStringList()<<"reserve"<<"--id"<<id
+                        <<"--loaded-log"<<air_log[0]->logName(),&reserve,&error)) {
     if(!automatic) {
       QMessageBox::warning(this,tr("Requests"),error);
     }
@@ -1615,7 +1616,8 @@ void MainWidget::requestsTimerData()
   }
   QJsonObject response;
   QString error;
-  if(!RunRequestCommand(QStringList()<<"eligible",&response,&error)) {
+  if(!RunRequestCommand(QStringList()<<"eligible"
+                        <<"--loaded-log"<<air_log[0]->logName(),&response,&error)) {
     air_requests_status->setText(
       tr("Auto-fulfillment unavailable: %1").arg(error));
     return;

@@ -27,9 +27,12 @@ class BridgeTests(unittest.TestCase):
         self.plan = self.root / "plans"
         self.plan.mkdir()
         self.ledger = self.plan / "2026-11-02.plan.json"
-        self.ledger.write_text(json.dumps([
-            {"start_ms": h * 3600000, "hard": True,
-             "kind": "top-hour-id"} for h in range(24)]))
+        self.ledger.write_text(json.dumps({
+            "log_name": "PROD_NEXT",
+            "events": [
+                {"start_ms": h * 3600000, "hard": True,
+                 "kind": "top-hour-id"} for h in range(24)]
+        }))
         self.catalog = {100001: {"cart": 100001, "group": "MUSIC",
                                  "title": "Track", "artist": "Performer",
                                  "length_ms": 180000}}
@@ -59,10 +62,12 @@ class BridgeTests(unittest.TestCase):
                 return Fake()
         bridge.datetime = Clock
         try:
-            result = bridge.reserve(self.store, request["id"], self.catalog, self.plan)
+            result = bridge.reserve(self.store, request["id"], self.catalog,
+                                  loaded_log="PROD_NEXT", plan_dir=self.plan)
             self.assertEqual(result["status"], "reserved")
             with self.assertRaises(bridge.ConsoleError):
-                bridge.reserve(self.store, request["id"], self.catalog, self.plan)
+                bridge.reserve(self.store, request["id"], self.catalog,
+                                  loaded_log="PROD_NEXT", plan_dir=self.plan)
             queued = bridge.complete(self.store, request["id"], 100001, True)
             self.assertEqual(queued["status"], "queued")
             self.assertEqual(self.store.queue("approved"), [])
@@ -86,7 +91,7 @@ class BridgeTests(unittest.TestCase):
         bridge.datetime = Clock
         try:
             with self.assertRaises(bridge.ConsoleError):
-                bridge.reserve(self.store, request["id"], self.catalog, self.plan)
+                bridge.reserve(self.store, request["id"], self.catalog, loaded_log="PROD_NEXT", plan_dir=self.plan)
             self.assertEqual(len(self.store.queue("approved")), 1)
         finally:
             bridge.datetime = original
@@ -104,11 +109,11 @@ class BridgeTests(unittest.TestCase):
                 return Fake()
         bridge.datetime = Clock
         try:
-            bridge.reserve(self.store, request["id"], self.catalog, self.plan)
+            bridge.reserve(self.store, request["id"], self.catalog, loaded_log="PROD_NEXT", plan_dir=self.plan)
             pending = bridge.complete(self.store, request["id"], 100001, False)
             self.assertEqual(pending["status"], "delivery_unknown")
             with self.assertRaises(bridge.ConsoleError):
-                bridge.reserve(self.store, request["id"], self.catalog, self.plan)
+                bridge.reserve(self.store, request["id"], self.catalog, loaded_log="PROD_NEXT", plan_dir=self.plan)
         finally:
             bridge.datetime = original
 

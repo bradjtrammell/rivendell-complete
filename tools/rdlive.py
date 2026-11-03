@@ -74,6 +74,11 @@ def load_ledger(path: Path, current: datetime) -> list[int]:
     if path.name!=f"{current.date().isoformat()}.plan.json":
         raise LiveError("Plan ledger date does not match current station date")
     data=json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data,dict):
+        name=data.get("log_name")
+        if not isinstance(name,str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}",name):
+            raise LiveError("Protected ledger missing validated log identity")
+        data=data.get("events")
     if not isinstance(data,list) or len(data)<24:
         raise LiveError("No valid 24-hour station plan")
     times=[]
