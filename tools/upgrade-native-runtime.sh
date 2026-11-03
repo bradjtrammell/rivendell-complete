@@ -21,9 +21,9 @@ command -v objdump >/dev/null || die 'objdump missing'
 command -v c++filt >/dev/null || die 'c++filt missing'
 [[ -L /etc/rd.conf && "$(readlink /etc/rd.conf)" == /etc/rivendell.d/rd-default.conf ]] ||
   die 'Unexpected Rivendell configuration; refusing overwrite'
-[[ "$(dpkg-query -W -f='\${Status} \${Version}' rivendell 2>/dev/null || :)" == 'install ok installed 4.5.0-1' ]] ||
+[[ "$(dpkg-query -W -f='${Status} ${Version}' rivendell 2>/dev/null || :)" == 'install ok installed 4.5.0-1' ]] ||
   die 'Rivendell package baseline mismatch'
-[[ "$(dpkg-query -W -f='\${Status} \${Version}' rivendell-webapi 2>/dev/null || :)" == 'install ok installed 4.5.0-1' ]] ||
+[[ "$(dpkg-query -W -f='${Status} ${Version}' rivendell-webapi 2>/dev/null || :)" == 'install ok installed 4.5.0-1' ]] ||
   die 'Rivendell webapi package baseline mismatch'
 [[ ! -e /etc/rivendell.d/rdcomplete-first-install ]] ||
   die 'First-install database marker still exists'
