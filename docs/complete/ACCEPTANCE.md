@@ -129,6 +129,14 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
    the user-writable checkout. This still does not qualify real on-air audio,
    public listener requests, waveform editor support or dynamic backtiming.
 
+10. Multiple read-only NAS mounts can now be configured with unique source
+    names and separate credentials. Each cart reference uses
+    `SOURCE/relative-filename` beneath the unchanged CAE external-audio root.
+    The Qt Control Center lists named source status and selects a source before
+    preview or import; legacy direct-root mounts are preserved and must not be
+    silently replaced. Source-mixed indexing and NFS/SMB hardware playback
+    remain **UNVERIFIED** until workstation testing.
+
 ## Implementation references
 
 - [Ubuntu 26.04 commissioning](STATION_SETUP.md)

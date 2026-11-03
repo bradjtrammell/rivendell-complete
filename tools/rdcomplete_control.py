@@ -561,8 +561,7 @@ class Console(QMainWindow):
                 cell = QTableWidgetItem(str(value))
                 cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
                 self.mount_table.setItem(r, c, cell)
-            if item["readonly_configured"] and not item["legacy"] or (
-                    item["legacy"] and item["readonly_configured"]):
+            if item["readonly_configured"]:
                 self.import_source.addItem(
                     f'{item["name"]} · {item["protocol"]} · {item["source"]}' +
                     ("" if item["readonly"] else " · offline (check before import)"),

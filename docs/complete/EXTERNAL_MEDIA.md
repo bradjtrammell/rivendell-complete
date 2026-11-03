@@ -29,6 +29,36 @@ escape the configured root (including symlink escapes), and refuses playback
 if the reference is invalid or the NAS file is unavailable. An unmapped cut
 continues to use Rivendell's own managed `/var/snd` cart audio.
 
+
+### Multiple NFS and SMB music sources
+
+A single Rivendell Complete station may now connect **multiple read-only NFS
+and SMB shares concurrently**. The Control Center's **Music & NAS** page lists
+configured source names, types, actual mountpoints and online/read-only status.
+Use **Add another read-only NFS or SMB source** for each share. Names are stable,
+lowercase 1–32 characters (such as `current`, `archive`, `imaging`).
+
+Each share receives its own exact mountpoint,
+`/mnt/radio-music/NAME`, while the existing
+`[ExternalAudio] Root=/mnt/radio-music` remains unchanged. Each SMB share has
+separate protected credentials under
+`/etc/rivendell-complete/nas-NAME.cred` (0600). NFS shares need none. Linux
+`fstab` persists individual mounts using read-only network filesystem
+options. No original file is copied or modified.
+
+The **Import library** page selects one source at a time and stores a
+qualified cart reference `NAME/path/to/song.mp3`. Files with identical names
+on separate shares are distinct; existing references are never renamed. The
+station's catalog exporter still resolves all qualified references through the
+same native CAE external-audio root.
+
+**Compatibility boundary:** Older installations with a NAS mounted directly
+on `/mnt/radio-music` remain operational as a **legacy single mount**. Adding
+named mounts on top of that existing mount is refused to prevent obscuring
+audio. A deliberate, separate audited migration is required before combining
+such a legacy root with named shares. The installer does **not** unmount,
+replace or silently migrate the legacy library.
+
 ## Scope and limitations
 
 This is a real playout-path change in `cae/cae.cpp`, not a symlink into the

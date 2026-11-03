@@ -75,6 +75,8 @@ class ProvisioningTests(unittest.TestCase):
         self.assertIn("all_installed", script)
         self.assertIn("jack-example-tools", script)
         self.assertIn("User systemd manager unavailable", script)
+        self.assertIn("/mnt/radio-music/", (ROOT / "tools/setup-nas.sh").read_text())
+        self.assertIn("nas-${mp##*/}.cred", (ROOT / "tools/setup-nas.sh").read_text())
 
     def test_package_resume_and_reauth(self):
         installer = (ROOT / "tools" / "install-ubuntu26.sh").read_text()
