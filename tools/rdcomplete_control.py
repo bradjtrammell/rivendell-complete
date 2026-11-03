@@ -361,6 +361,7 @@ class Console(QMainWindow):
         page.add(self.import_folder_list)
         actions = QHBoxLayout()
         actions.addWidget(self.register(push("Audit existing NAS carts", self.audit_direct_audio, True)))
+        actions.addWidget(self.register(push("Repair cart metadata", self.repair_audio_metadata, True)))
         actions.addWidget(self.register(push("Preview scan", self.scan_import)))
         actions.addWidget(self.register(push("Import all supported tracks", self.import_music, True)))
         page.layout_.addLayout(actions)
@@ -639,7 +640,7 @@ class Console(QMainWindow):
             except (ValueError, KeyError, TypeError):
                 pass
         if mode in ("mount", "mount-list", "nas-discovery", "group-list",
-                     "import-folders", "import", "scan", "audit-direct-audio", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
+                     "import-folders", "import", "scan", "audit-direct-audio", "repair-audio-metadata", "stream-check", "stream-start", "request-start", "route-save", "route-start", "schedule-enable", "audio-discover", "catalog", "restart-audio") and not good:
             details = (bytes(self.output) + b"\n" + bytes(self.errors)).decode("utf-8", "replace")[-1700:]
             self._alert(f"Operation failed (exit {code}).\n\n{details}")
         if mode == "audit-direct-audio":
@@ -1012,6 +1013,15 @@ class Console(QMainWindow):
         self.pending_nas_mapping = (name, folder)
         self._root("mount-smb" if smb else "mount-nfs",
                    ["--source", src, "--name", name], creds, "mount")
+
+    def repair_audio_metadata(self):
+        if not self._confirm("Repair imported CART/CUT metadata",
+                "Repair only verified invalid metadata for imported NAS carts?\n\n"
+                "This changes Rivendell database CART/CUT rows, not original songs. "
+                "A private recovery snapshot is created first. "
+                "RDAirPlay must be closed. Existing carts will not be deleted or re-imported."):
+            return
+        self._root("repair-audio-metadata", mode="repair-audio-metadata")
 
     def audit_direct_audio(self):
         self._root("audit-direct-audio", mode="audit-direct-audio")
