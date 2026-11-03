@@ -172,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     schedule.add_argument("--jingle-cart", type=int, default=0)
     schedule.add_argument("--fill-cart", type=int, default=0)
     commands.add_parser("restart-audio")
+    commands.add_parser("audit-direct-audio")
     for name in ("scan", "import"):
         sub = commands.add_parser(name)
         sub.add_argument("--group", required=True)
@@ -229,6 +230,15 @@ def main(argv: list[str] | None = None) -> int:
         subprocess.run(["/usr/bin/systemctl", "is-active", "--quiet", "rivendell"],
                        check=True, timeout=15)
         print("Rivendell audio daemon restarted with the NAS configuration")
+    elif args.action == "audit-direct-audio":
+        script = HERE / "rdcomplete_direct_audio_check.py"
+        if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
+            raise CommissionError("Native direct-audio diagnostic is missing or unsafe")
+        result = subprocess.run(
+            ["/usr/bin/python3", str(script)],
+            check=False, timeout=600)
+        if result.returncode:
+            raise CommissionError("Direct NAS audio audit identified issues; inspect report")
     elif args.action == "list-groups":
         script = HERE / "rdexternal.py"
         if script.is_symlink() or not script.is_file() or script.stat().st_uid != 0:
