@@ -47,6 +47,7 @@ def diagnose(*, root: Path = ROOT, refs: Path = REFS,
         "referenced_carts": 0,
         "available_originals": 0,
         "missing_originals": 0,
+        "unreadable_by_cae": 0,
         "missing_cart_rows": 0,
         "missing_cut_rows": 0,
         "invalid_cut_metadata": 0,
@@ -88,11 +89,20 @@ def diagnose(*, root: Path = ROOT, refs: Path = REFS,
                 elif original.stat().st_size == 0:
                     problems.append("empty_original")
                 else:
-                    report["available_originals"] += 1
-            except (OSError, ValueError, RuntimeError, ImportFailure):
+                    read = subprocess.run(
+                        ["/usr/sbin/runuser", "-u", "rivendell", "--",
+                         "/usr/bin/test", "-r", str(original)],
+                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL, check=False, timeout=8)
+                    if read.returncode:
+                        report["unreadable_by_cae"] += 1
+                        problems.append("original_unreadable_by_cae")
+                    else:
+                        report["available_originals"] += 1
+            except (OSError, ValueError, RuntimeError, ImportFailure, subprocess.TimeoutExpired):
                 problems.append("original_unavailable")
             if any(p in problems for p in ("original_unavailable", "empty_original",
-                                           "unsupported_audio_type")):
+                                           "unsupported_audio_type", "original_unreadable_by_cae")):
                 report["missing_originals"] += 1
             row = rows.get(cart)
             if row is None:
