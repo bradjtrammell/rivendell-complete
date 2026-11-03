@@ -102,6 +102,8 @@ log 'Staging catalog, scheduling, requests and diagnostics command-line tools'
 bash tools/install-station-utilities.sh
 log 'Installing native Qt station operator console'
 bash tools/install-control-center.sh
+log 'Compiling and staging enhanced native RDAirPlay Requests panel'
+bash tools/install-airplay-requests.sh
 log 'Test install staging complete; it is NOT air-qualified'
 log 'Next: configure RDAdmin/service, NAS references, stream and JACK outputs'
 log 'Diagnostics: python3 tools/rdselftest.py --strict --json'
