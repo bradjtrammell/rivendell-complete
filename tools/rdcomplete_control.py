@@ -36,6 +36,45 @@ MUSIC_ROOT = Path("/mnt/radio-music")
 GROUP = "MUSIC"
 SERVICE = "Production"
 
+SMB_UNC_RE = re.compile(
+    r"//([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9_][A-Za-z0-9_.-]{0,79})/*\\Z"
+)
+
+
+def normalize_smb_unc(source: str, expected_server: str = "") -> tuple[str, str]:
+    """Convert a selected UNC into a canonical share, never a subfolder path."""
+    if not isinstance(source, str):
+        raise ValueError("Select a discovered SMB share")
+    match = SMB_UNC_RE.fullmatch(source.strip())
+    if match is None:
+        raise ValueError("Enter //SERVER/SHARE; select folders with the folder browser")
+    host, share = match.groups()
+    if expected_server and host.casefold() != expected_server.casefold():
+        raise ValueError("Selected share does not belong to the entered NAS server")
+    return f"//{host}/{share}", share
+
+
+def normalize_nas_folder(folder: str) -> str:
+    """Validate a relative SMB folder chosen through the browser."""
+    if not isinstance(folder, str) or len(folder) > 1024 or "\\" in folder:
+        raise ValueError("Invalid NAS folder path")
+    if not folder:
+        return ""
+    if folder.startswith("/"):
+        raise ValueError("Use a relative folder inside the selected share")
+    parts = folder.rstrip("/").split("/")
+    if any(not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_ .-]{0,150}", part)
+           or part in (".", "..") for part in parts):
+        raise ValueError("Folder names may contain letters, numbers, underscores, spaces, dots and hyphens")
+    return "/".join(parts)
+
+
+def nas_child_folder(current: str, child: str) -> str:
+    if not isinstance(child, str) or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_ .-]{0,150}", child) or child in (".", ".."):
+        raise ValueError("Unsafe NAS folder name")
+    return normalize_nas_folder("/".join(filter(None, (current, child))))
+
+
 COLORS = {
     "paper": "#F7F4EC", "white": "#FFFEFB", "ink": "#21342D",
     "muted": "#526158", "pine": "#225A40", "tangerine": "#B74D2E",
@@ -121,6 +160,8 @@ class Console(QMainWindow):
         self.request_ids: list[int] = []
         self.nas_discovery_rows: list[dict] = []
         self.nas_discovery_mode = ""
+        self.nas_browse_history: list[str] = []
+        self.nas_pending_navigation: tuple[str, str, str] | None = None
         self.import_folder = ""
         self.last_import_source = ""
         self.groups_loaded = False
@@ -252,13 +293,26 @@ class Console(QMainWindow):
         self.nas_discovery.horizontalHeader().setStretchLastSection(True)
         self.nas_discovery.setMinimumHeight(145)
         self.nas_discovery.itemSelectionChanged.connect(self.select_discovery)
+        self.nas_discovery.itemDoubleClicked.connect(self.enter_nas_discovery)
         page.add(self.nas_discovery)
+        self.nas_location = note(
+            "Choose an SMB share, then double-click to browse its folders. "
+            "NFS subfolders are browsable after mounting.")
+        page.add(self.nas_location)
+        nav = QHBoxLayout()
+        nav.addWidget(self.register(push("Back", self.nas_go_back, True)))
+        nav.addWidget(self.register(push("Up one folder", self.nas_go_up, True)))
+        nav.addWidget(self.register(push("Open selected folder", self.nas_open_selected, True)))
+        nav.addWidget(self.register(push("Use this folder for import", self.nas_use_folder, True)))
+        page.layout_.addLayout(nav)
         self.nas_browse_folder = QLineEdit()
         self.nas_browse_folder.setPlaceholderText("Optional SMB subfolder: Albums / Rock")
         form.addRow("Browse within share", self.nas_browse_folder)
-        page.add(note("Select a discovered share to populate the mapping. SMB folder browsing uses "
-                      "temporary protected credentials and does not mount or modify source files. "
-                      "NFS shows exports advertised by the server; some NFSv4 servers disable export listing."))
+        page.add(note("Double-click an SMB share, then double-click folders to descend. "
+                      "Back and Up navigate without mounting. The current folder is saved "
+                      "as the default import folder when you connect the source. "
+                      "Underscores are valid in share names. Credentials remain temporary; "
+                      "NFS export browsing lists advertised exports only."))
         page.add(note("A system authentication dialog will ask permission to mount the NAS. SMB credentials are never included in command arguments or displayed in activity logs."))
         page.add(self.register(push("Connect and configure source", self.mount_nas)))
         page.add(self.register(push("Apply configuration to audio daemon", self.restart_daemon, True)))
@@ -524,9 +578,22 @@ class Console(QMainWindow):
         if mode == "nas-discovery" and good:
             try:
                 self._show_nas_discovery(bytes(self.output))
+                if self.nas_pending_navigation is not None:
+                    previous, destination, action = self.nas_pending_navigation
+                    if action == "back" and self.nas_browse_history:
+                        self.nas_browse_history.pop()
+                    elif action == "enter-share":
+                        self.nas_browse_history.clear()
+                    elif previous != destination:
+                        self.nas_browse_history.append(previous)
             except (ValueError, KeyError, TypeError) as exc:
                 good = False
                 self._alert(f"NAS discovery returned invalid data: {exc}")
+        if mode == "nas-discovery":
+            if not good and self.nas_pending_navigation is not None:
+                previous, _, _ = self.nas_pending_navigation
+                self.nas_browse_folder.setText(previous)
+            self.nas_pending_navigation = None
         if mode == "group-list" and good:
             try:
                 self._show_groups(bytes(self.output))
@@ -592,38 +659,44 @@ class Console(QMainWindow):
         if page == 2 and not self.groups_loaded and not self.busy:
             self.load_groups()
 
-    def _discovery_command(self, mode: str):
+    def _discovery_command(self, mode: str) -> bool:
+        if self.busy:
+            return False
         host = self.nas_server.text().strip()
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,252}", host):
             self._alert("Enter a valid NAS IP address or DNS hostname.")
-            return
+            return False
         smb = self.nas_protocol.currentText() == "SMB"
         args = ["rdcomplete-browse", "--protocol", "smb" if smb else "nfs",
                 "--mode", mode, "--server", host]
         if mode == "folders":
             if not smb:
-                self._alert("NFS folders are available after mounting an advertised export.")
-                return
-            source = self.nas_source.text().strip()
-            prefix = f"//{host}/"
-            if not source.startswith(prefix):
-                self._alert("Select a discovered share first.")
-                return
-            args += ["--share", source[len(prefix):],
-                     "--folder", self.nas_browse_folder.text().strip()]
+                self._alert("Mount the selected NFS export before browsing its subfolders.")
+                return False
+            try:
+                source, share = normalize_smb_unc(self.nas_source.text(), host)
+                folder = normalize_nas_folder(self.nas_browse_folder.text())
+            except ValueError as exc:
+                self._alert(str(exc))
+                return False
+            self.nas_source.setText(source)
+            self.nas_browse_folder.setText(folder)
+            args.extend(["--share", share, "--folder", folder])
         secret = None
         if smb:
             username = self.nas_username.text().strip()
             password = self.nas_password.text()
             if not username or not password:
-                self._alert("Enter the SMB username and password to discover shares.")
-                return
+                self._alert("Enter the SMB username and password to browse shares.")
+                return False
             secret = json.dumps({"username": username, "password": password}).encode("utf-8")
         self.nas_discovery_mode = mode
         self.execute(args, "nas-discovery", secret)
+        return True
 
     def discover_shares(self):
-        self._discovery_command("shares")
+        if self._discovery_command("shares"):
+            self.nas_browse_history.clear()
 
     def discover_remote_folders(self):
         self._discovery_command("folders")
@@ -636,40 +709,143 @@ class Console(QMainWindow):
         else:
             rows = [{"name": value, "mountable": True,
                      "description": "Directory"} for value in result.get("folders", [])]
-        if not isinstance(rows, list):
-            raise ValueError("NAS discovery returned an invalid share list")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError("NAS discovery returned an invalid share/folder list")
         self.nas_discovery_rows = rows
-        self.nas_discovery.setRowCount(len(rows))
-        for r, item in enumerate(rows):
-            for c, value in enumerate([
-                item["name"], item.get("description", ""),
-                "Selectable" if item.get("mountable") else "Unsupported share name",
-            ]):
-                cell = QTableWidgetItem(str(value))
-                cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
-                self.nas_discovery.setItem(r, c, cell)
+        self.nas_discovery.blockSignals(True)
+        try:
+            self.nas_discovery.setRowCount(len(rows))
+            for r, item in enumerate(rows):
+                for c, value in enumerate([
+                    item["name"], item.get("description", ""),
+                    "Selectable" if item.get("mountable") else "Unsupported name",
+                ]):
+                    cell = QTableWidgetItem(str(value))
+                    cell.setFlags(cell.flags() & ~Qt.ItemIsEditable)
+                    self.nas_discovery.setItem(r, c, cell)
+            self.nas_discovery.clearSelection()
+        finally:
+            self.nas_discovery.blockSignals(False)
+        if mode == "folders":
+            folder = normalize_nas_folder(str(result.get("folder", "")))
+            self.nas_browse_folder.setText(folder)
+            shown = folder or "/ (share root)"
+            self.nas_location.setText(
+                f"Browsing {self.nas_source.text()} / {shown} — "
+                f"{len(rows)} subfolders. Double-click to open; Connect saves this location.")
+        else:
+            self.nas_location.setText(
+                f"Discovered {len(rows)} shares/exports. Select a row to map it; "
+                "double-click an SMB share to browse inside.")
         self.status.setText(f"Discovered {len(rows)} {'shares/exports' if mode=='shares' else 'folders'}")
 
     def select_discovery(self):
+        if self.nas_discovery_mode != "shares":
+            return
         row = self.nas_discovery.currentRow()
         if row < 0 or row >= len(self.nas_discovery_rows):
             return
         choice = self.nas_discovery_rows[row]
         if not choice.get("mountable"):
             return
+        host = self.nas_server.text().strip()
+        name = choice["name"]
+        self.nas_source.setText(
+            f"//{host}/{name}" if self.nas_protocol.currentText() == "SMB"
+            else f"{host}:{name}")
+        suggested = re.sub(r"[^a-z0-9_-]", "-", str(name).lower()).strip("-")
+        if suggested and not self.nas_name.text():
+            self.nas_name.setText(("share-" + suggested)[:32])
+        self.nas_browse_folder.clear()
+        self.nas_browse_history.clear()
+
+    def enter_nas_discovery(self, item):
+        if self.busy:
+            return
         if self.nas_discovery_mode == "shares":
-            host = self.nas_server.text().strip()
-            name = choice["name"]
-            self.nas_source.setText(
-                f"//{host}/{name}" if self.nas_protocol.currentText() == "SMB"
-                else f"{host}:{name}")
-            suggested = re.sub(r"[^a-z0-9_-]", "-", str(name).lower()).strip("-")
-            if suggested and not self.nas_name.text():
-                self.nas_name.setText(("share-" + suggested)[:32])
-            self.nas_browse_folder.clear()
-        else:
-            folder = self.nas_browse_folder.text().strip()
-            self.nas_browse_folder.setText("/".join(filter(None, (folder, choice["name"]))))
+            self.select_discovery()
+            if self.nas_protocol.currentText() == "SMB":
+                self._navigate_nas_folder("", "enter-share")
+            return
+        self.nas_open_selected()
+
+    def _navigate_nas_folder(self, destination: str, action: str):
+        if self.busy:
+            return
+        try:
+            target = normalize_nas_folder(destination)
+            current = normalize_nas_folder(self.nas_browse_folder.text())
+        except ValueError as exc:
+            self._alert(str(exc))
+            return
+        self.nas_pending_navigation = (current, target, action)
+        self.nas_browse_folder.setText(target)
+        if not self._discovery_command("folders"):
+            self.nas_browse_folder.setText(current)
+            self.nas_pending_navigation = None
+
+    def nas_open_selected(self):
+        row = self.nas_discovery.currentRow()
+        if row < 0 or row >= len(self.nas_discovery_rows):
+            self._alert("Select a share or folder to open.")
+            return
+        if self.nas_discovery_mode == "shares":
+            self.select_discovery()
+            if self.nas_protocol.currentText() == "SMB":
+                self._navigate_nas_folder("", "enter-share")
+            return
+        item = self.nas_discovery_rows[row]
+        if not item.get("mountable"):
+            return
+        try:
+            target = nas_child_folder(self.nas_browse_folder.text(), str(item["name"]))
+        except ValueError as exc:
+            self._alert(str(exc))
+            return
+        self._navigate_nas_folder(target, "forward")
+
+    def nas_go_up(self):
+        if self.nas_discovery_mode != "folders":
+            return
+        try:
+            folder = normalize_nas_folder(self.nas_browse_folder.text())
+        except ValueError as exc:
+            self._alert(str(exc))
+            return
+        if not folder:
+            self.discover_shares()
+            return
+        parent = "/".join(folder.split("/")[:-1])
+        self._navigate_nas_folder(parent, "up")
+
+    def nas_go_back(self):
+        if self.nas_discovery_mode != "folders" or not self.nas_browse_history:
+            self.discover_shares()
+            return
+        self._navigate_nas_folder(self.nas_browse_history[-1], "back")
+
+    def nas_use_folder(self):
+        if self.nas_discovery_mode == "shares":
+            self._alert("Open a share first, then select a folder for import.")
+            return
+        if self.nas_discovery_mode != "folders":
+            self._alert("Discover an SMB share first.")
+            return
+        try:
+            folder = normalize_nas_folder(self.nas_browse_folder.text())
+            row = self.nas_discovery.currentRow()
+            if 0 <= row < len(self.nas_discovery_rows):
+                child = self.nas_discovery_rows[row]
+                if child.get("mountable"):
+                    folder = nas_child_folder(folder, str(child["name"]))
+        except ValueError as exc:
+            self._alert(str(exc))
+            return
+        self.nas_browse_folder.setText(folder)
+        self.nas_location.setText(
+            f"Selected import folder: {folder or '/ (share root)'}. "
+            "Click Connect and configure source to save the mapping.")
+        self.status.setText(f"Selected NAS import folder: {folder or '/'}")
 
     def load_groups(self):
         self._root("list-groups", mode="group-list")
@@ -794,12 +970,21 @@ class Console(QMainWindow):
             return
         src = self.nas_source.text().strip()
         smb = self.nas_protocol.currentText() == "SMB"
-        pattern = (r"//[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_./-]+"
-                   if smb else r"[A-Za-z0-9][A-Za-z0-9_.-]*:/[A-Za-z0-9_./-]+")
-        if not re.fullmatch(pattern, src):
-            self._alert("Enter a valid full NAS share/export path.")
+        if smb:
+            try:
+                src, _ = normalize_smb_unc(src, self.nas_server.text().strip())
+                self.nas_source.setText(src)
+            except ValueError as exc:
+                self._alert(str(exc))
+                return
+        elif not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*:/[A-Za-z0-9_./-]+", src):
+            self._alert("Enter a valid full NFS export, e.g. NAS:/exports/music.")
             return
-        folder = self.nas_browse_folder.text().strip()
+        try:
+            folder = normalize_nas_folder(self.nas_browse_folder.text())
+        except ValueError as exc:
+            self._alert(str(exc))
+            return
         if folder and (len(folder) > 1024 or
                        any(not component or component in (".", "..") or
                            any(ord(ch) < 32 or ord(ch) == 127 for ch in component)
