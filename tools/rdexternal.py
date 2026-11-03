@@ -271,7 +271,7 @@ def main(argv=None) -> int:
         ap.error("--limit must be positive")
     if args.reference_prefix and (
         len(args.reference_prefix) > 1024
-        or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}(?:/[A-Za-z0-9_ .-]+)*",
+        or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,31}(?:/[A-Za-z0-9_ .-]+)*",
                             args.reference_prefix)
         or any(part in ("", ".", "..") for part in args.reference_prefix.split("/"))
     ):

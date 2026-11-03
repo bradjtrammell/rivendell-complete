@@ -78,6 +78,18 @@ class ExternalMediaTests(unittest.TestCase):
         self.assertEqual(record.title, "Test Track")
         self.assertEqual(self.track.read_bytes(), before)
 
+    def test_legacy_subfolder_preview_accepts_capitalized_directory(self):
+        with wave.open(str(self.root / "Power" / "Another.wav"), "wb") as w:
+            w.setnchannels(2)
+            w.setsampwidth(2)
+            w.setframerate(48000)
+            w.writeframes(b"\0" * 4 * 48000)
+        status = module.main([
+            "--root", str(self.root / "Power"), "--refs", str(self.refs),
+            "--group", "MUSIC", "--reference-prefix", "Power"])
+        self.assertEqual(status, 0)
+        self.assertFalse(self.refs.exists())
+
     def test_dry_run_never_writes(self):
         if not shutil.which("ffprobe"):
             self.skipTest("ffprobe not installed")

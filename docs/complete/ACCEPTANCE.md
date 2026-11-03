@@ -137,6 +137,17 @@ Evidence must be reported distinctly: **inspected → syntax/static checks → u
     silently replaced. Source-mixed indexing and NFS/SMB hardware playback
     remain **UNVERIFIED** until workstation testing.
 
+11. RDAirPlay native source now adds a listener request panel and opt-in
+    guarded direct log-queue insertion, backed by a deduplicated local
+    request bridge. **Native build, in-place upgrade and actual queue/audio
+    acceptance are still unverified**; existing installed RDAirPlay does
+    not acquire this button from the Python Control Center installer.
+12. Dynamic SMB and NFS discovery, source-folder mapping, actual Rivendell
+    group selection for import, and a protected 24-hour future log planner
+    are now wired into the native Qt Control Center. Headless Qt and unit
+    checks are meaningful development evidence, not proof that this
+    workstation's NAS/authentication/audio infrastructure is commissioned.
+
 ## Implementation references
 
 - [Ubuntu 26.04 commissioning](STATION_SETUP.md)

@@ -241,3 +241,40 @@ complete release.
   metadata forwarding, and automatic failover.
 
 No production claim is made for any of the remaining items.
+
+## Dynamic NAS discovery and named-source import
+
+The Control Center can query SMB servers by hostname/IP and credentials to
+discover shares and browse visible folders, or list advertised NFS exports.
+Selecting a remote share fills the mount form. The chosen subfolder is kept
+as a private per-source default import location; it never becomes an SMB
+password store. When mounting, each share is mapped read-only beneath
+\`/mnt/radio-music/SOURCE\`. A prior direct-root NAS mount is kept untouched.
+
+**Import library** offers existing Rivendell groups as categories, including
+MUSIC, STINGS, IDENTS, and any JINGLES group created in RDAdmin. Pick the
+source, folder and group, run the preview and confirm the import. CART/CUT
+records become available to normal Rivendell scheduling. Duplicate names
+on different mounted sources cannot alias one another.
+
+## Future schedule preview and log creation
+
+The **Programming & scheduling** tab accepts an ordered list of playable
+music categories (e.g., \`MUSIC,GOLD,MUSIC\`), an actual legal ID cart,
+optional jingle cart and fill-bed cart, plus a future date and unique log
+name. It exports the live playable catalog from MariaDB and validates the
+ID/jingle/bed carts with exact measured durations. Preview refuses an hour
+that cannot meet separation, timing, protected ID or fill requirements.
+
+After a successful preview, **Create future Rivendell log** uses
+\`rdcomplete-stationplan\` and \`rdclilogedit\` to create a NEW future
+\`Production\` log. It does not overwrite an existing on-air log.
+The protected plan ledger is written to the local user state directory
+only after the native log editor accepts the new log. The auto-request
+bridge uses that ledger once its date arrives. Edit sophisticated clocks,
+commercial breaks, sweeper scheduling and grids in RDLogManager.
+
+If the command rejects insufficient music, missing legal IDs, too-long
+segments or an inaccessible NAS, **fix the content or settings** rather
+than disabling schedule protection. Until native RDAirPlay and actual
+playout are qualified, do not call the generated log on-air ready.

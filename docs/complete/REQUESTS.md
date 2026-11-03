@@ -24,3 +24,28 @@ requests in a new future log without displacing protected IDs or spots.
 External use needs TLS reverse proxy, source restrictions, and authentication.
 Never forward raw port 8787 to the Internet or embed the token in public HTML.
 Automatic insertion into an already loaded *live* Rivendell log is not yet qualified.
+## RDAirPlay operator panel (development)
+
+A native **Requests** button and queue view have been added to the RDAirPlay
+source. The panel shows a listener name, song, artist, cart, pending/approved
+status, and operator **Approve / Reject / Add to Main Log** actions.
+The Add action reserves the approved request and uses \`RDLogPlay::insert()\`
+rather than claiming a request was scheduled merely because a backend row
+changed.
+
+Automatic fulfillment is explicitly opt-in. It requires:
+- RDAirPlay AUTO mode, authorized add-to-log permissions and a loaded main log.
+- An already approved request, an actual playable cart, and enough time
+  before the next protected hard event.
+- A committed future program log and a matching current-day
+  \`~/.local/state/rivendell-complete/plans/YYYY-MM-DD.plan.json\` ledger.
+- No ambiguous previously attempted queue delivery. Unknown outcomes
+  require an operator to reconcile them manually.
+
+Closing the dialog does not turn off an operator-enabled auto session;
+restarting RDAirPlay resets the setting to OFF.
+
+**Not yet live-qualified:** the patched RDAirPlay binary has not been built
+and installed on the user's workstation. The native on-air queue action and
+actual played-status feedback need hardware acceptance. "Scheduled" is not
+the same as "Played."

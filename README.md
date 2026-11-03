@@ -141,6 +141,57 @@ RDAdmin. Public listener requests, stream credentials, NAS mount paths, audio
 routing, live scheduling and GUI integration still require commissioning or
 additional engineering; **this command is not a complete 5.0 release**.
 
+
+### RDAirPlay listener request controls (native build required)
+
+The native RDAirPlay source in \`rdairplay/rdairplay.cpp\` adds a **Requests**
+button in the bottom operator control strip. Its dialog displays each
+listener's name, requested song and artist, cart and approval status; the
+operator can approve, reject or insert an approved request into the currently
+loaded **Main Log**. Insertion uses Rivendell's native
+\`RDLogPlay::insert()\`, not a database-only status change. Each request is
+atomically reserved, deduplicated and reconciled. Automatic fulfillment is
+**opt-in**, only runs while RDAirPlay is in **AUTO** mode with an operator
+authorized to add to the log, and requires today's committed, protected
+24-hour plan ledger. Automatic request insertion remains off by default and
+stops when RDAirPlay exits.
+
+**This is native C++ source code, NOT a feature of the previously installed
+RDAirPlay 4.5.0-1 executable.** It requires a new native package build and
+verified in-place upgrade. No successful physical playback/queue execution
+has been claimed; until qualified, treat this as development functionality.
+
+### NAS discovery, categories and scheduling
+
+In **Music & NAS**, entering a hostname/IP and SMB credentials enables
+**Discover server shares** using Samba's \`smbclient\`, with optional
+subfolder browsing. NFS discovers advertised exports using \`showmount\`.
+SMB discovery credentials go through stdin into a protected short-lived
+credential file; they never appear in process arguments. Selecting a share
+populates the read-only mount mapping, and the selected subfolder is saved
+locally (without storing the password in this mapping).
+
+In **Import library**, select a mounted source, browse its folders, and
+choose any actual Rivendell destination group (e.g. MUSIC, IDENTS, STINGS,
+or a JINGLES group created in RDAdmin). The importer creates CART/CUT
+metadata and immutable source-prefixed reference files; original NAS files
+are not copied or rewritten.
+
+In **Programming & scheduling**, enter a rotation of actual imported
+music groups and choose an existing legal ID cart. The helper measures ID,
+jingle, and optional fill-bed lengths from real Rivendell CART records and
+checks the associated audio files. Preview builds a protected 24-hour
+program plan; only **Create future Rivendell log** writes a new log and
+the date's request-safety ledger. Complex traffic/spot grids and clock rules
+remain in RDLogManager, which is linked from the scheduling page.
+
+**Limitations:** A category group must already exist; a single jingle cart
+can be inserted at the selected interval, but arbitrary jingle rotations
+and detailed traffic clocks are not yet a complete in-GUI experience.
+Unfillable 24-hour plans correctly fail rather than fabricating audio.
+The request status \`scheduled\` means inserted in the log, **not proof
+that the audio actually played**.
+
 ### Native Qt station control center
 
 A native **Rivendell Complete** desktop application is installed by
